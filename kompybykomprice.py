@@ -10,7 +10,7 @@ def fetch_product_data_with_gpt(query):
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "You are a shopping assistant."},
-            {"role": "user", "content": f"Generate a conversational response for the best mobile phones under ₹20,000 available in Indian stores with their prices, product names, store names, exclusive offers, discount details, and links to shop online. Present the information in a table and include a breakdown of the offers."}
+            {"role": "user", "content": f"Generate a conversational response for the following query: '{query}'. Provide the best products available in Indian stores with their prices, product names, store names, exclusive offers, discount details, and links to shop online. Present the information in a table and include a breakdown of the offers."}
         ],
         max_tokens=500
     )
@@ -24,16 +24,19 @@ kompy_gif_url = "https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2Z1Ym5kN2YxMmhjNX
 st.image(kompy_gif_url, width=150)
 
 # User input for product search
-query = st.text_input("Search for mobile phones (e.g., best mobile phone under ₹20,000):")
+query = st.text_input("Search for products (e.g., best mobile phone under ₹20,000):")
+
+# Initialize result variable
+result = ""
 
 if query:
-    st.write(f"Looking for the best mobile phones under ₹20,000? Here are the top options for you from popular Indian stores:")
+    st.write(f"Looking for the best products for: '{query}'")
     
     # Fetch product data using GPT
-    gpt_reply = fetch_product_data_with_gpt(query)
+    result = fetch_product_data_with_gpt(query)
     
-    # Display GPT response as table
-    st.markdown(gpt_reply, unsafe_allow_html=True)
+    # Display GPT response as a table
+    st.markdown(result, unsafe_allow_html=True)
 
 # Suggested questions related to trending electronics and product comparisons
 st.subheader("Suggested Shopping Queries")
@@ -50,14 +53,10 @@ suggestions = [
 # Create buttons for suggested questions
 for question in suggestions:
     if st.button(question):
-        # Set the query text input to the clicked suggestion
-        st.session_state.query = question  # Store query in session state
         query = question  # Set query for fetching results
-        gpt_reply = fetch_product_data_with_gpt(query)
-        st.markdown(gpt_reply, unsafe_allow_html=True)
+        result = fetch_product_data_with_gpt(query)  # Fetch results
+        st.markdown(result, unsafe_allow_html=True)
 
-# If a query was previously set, show results
-if 'query' in st.session_state:
-    query = st.session_state.query
-    gpt_reply = fetch_product_data_with_gpt(query)
-    st.markdown(gpt_reply, unsafe_allow_html=True)
+# Display the result only once
+if result:
+    st.markdown(result, unsafe_allow_html=True)
