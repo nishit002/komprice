@@ -2,7 +2,7 @@ import openai
 import streamlit as st
 
 # Set your OpenAI API key
-openai.api_key = "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"
+openai.api_key = "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"
 
 # Fetch product data using GPT with a focus on exclusive deals
 def fetch_product_data_with_gpt(query):
