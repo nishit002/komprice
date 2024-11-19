@@ -2,7 +2,8 @@ import openai
 import streamlit as st
 
 # Set your OpenAI API key securely
-openai.api_key = st.secrets["openai_api_key"]
+openai.api_key = st.secrets["openai"]["openai_api_key"]
+
 
 # Function to fetch product data using GPT
 def fetch_product_data_with_gpt(query):
