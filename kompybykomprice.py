@@ -2,9 +2,9 @@ import openai
 import streamlit as st
 
 # Set your OpenAI API key securely
-openai.api_key = st.secrets["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"]
+openai.api_key = st.secrets["openai_api_key"]
 
-# Fetch product data using GPT with a focus on exclusive deals
+# Function to fetch product data using GPT
 def fetch_product_data_with_gpt(query):
     try:
         response = openai.ChatCompletion.create(
