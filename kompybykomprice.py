@@ -86,9 +86,12 @@ def scrape_products(urls):
     return results
 
 # Pad features list to ensure consistent lengths
-def pad_list(data, length=10):
-    """Ensure lists have consistent length by padding with empty strings."""
-    return data + [""] * (length - len(data))
+def align_features(features_1, features_2):
+    """Align two feature lists to the same length by padding with empty strings."""
+    max_length = max(len(features_1), len(features_2))
+    features_1 = features_1 + [""] * (max_length - len(features_1))
+    features_2 = features_2 + [""] * (max_length - len(features_2))
+    return features_1, features_2
 
 # Streamlit App
 st.title("🛒 Detailed Product Comparison App")
@@ -111,14 +114,13 @@ if st.button("🔍 Show Comparison"):
     data_1 = scrape_products(urls_1)
     data_2 = scrape_products(urls_2)
 
-    # Ensure consistent lengths for feature lists
-    data_1_features = pad_list(data_1[0]["features"], 10)
-    data_2_features = pad_list(data_2[0]["features"], 10)
+    # Align features
+    data_1_features, data_2_features = align_features(data_1[0]["features"], data_2[0]["features"])
 
     # Feature Comparison Table
     st.markdown("### 🧩 Feature Comparison")
     comparison_data = {
-        "Feature": ["Title", "Price"] + [f"Feature {i+1}" for i in range(10)],
+        "Feature": ["Title", "Price"] + [f"Feature {i+1}" for i in range(len(data_1_features))],
         product_1: [data_1[0]["title"], data_1[0]["price"]] + data_1_features,
         product_2: [data_2[0]["title"], data_2[0]["price"]] + data_2_features,
     }
