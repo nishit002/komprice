@@ -38,23 +38,43 @@ async def scrape_page(url, latitude=28.4595, longitude=77.0266):
                 permissions=["geolocation"],  # Allow geolocation
             )
             page = await context.new_page()
-            await page.goto(url, timeout=60000)  # 60 seconds timeout
 
-            # Wait for the main content to load
+            st.write(f"Navigating to {url}...")
+            await page.goto(url, timeout=120000)  # 120 seconds timeout
+
+            # Wait for main content to load
+            st.write("Waiting for the page to load...")
             await page.wait_for_load_state("networkidle")
 
-            # Extract title and reviews
-            title = await page.text_content('span[id="productTitle"]') or "Title not found"
-            reviews = await page.eval_on_selector_all(
-                'span[data-hook="review-body"]',
-                "elements => elements.map(el => el.textContent.trim())",
-            )
+            # Debugging: Save a screenshot of the loaded page
+            await page.screenshot(path="debug_screenshot.png")
+            st.write("Screenshot saved: debug_screenshot.png")
 
-            # Close browser
+            # Extract Title
+            try:
+                title = await page.text_content('span[id="productTitle"]') or "Title not found"
+                title = title.strip()
+            except Exception as e:
+                st.write(f"Error extracting title: {e}")
+                title = "Error extracting title"
+
+            # Extract Reviews
+            try:
+                reviews = await page.eval_on_selector_all(
+                    'span[data-hook="review-body"]',
+                    "elements => elements.map(el => el.textContent.trim())",
+                )
+                reviews = reviews if reviews else ["No reviews found"]
+            except Exception as e:
+                st.write(f"Error extracting reviews: {e}")
+                reviews = ["Error extracting reviews"]
+
             await browser.close()
 
-            return {"title": title.strip(), "reviews": reviews}
+            return {"title": title, "reviews": reviews}
+
     except Exception as e:
+        st.error(f"Failed to scrape {url}: {e}")
         return {"title": "Error", "reviews": [f"Failed to fetch page: {e}"]}
 
 async def scrape_multiple_pages(urls):
