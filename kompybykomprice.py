@@ -24,7 +24,6 @@ USER_AGENTS = [
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI."""
     try:
-        # Construct ScraperAPI URL
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}  # Random User Agent
 
@@ -66,7 +65,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with Enhanced Sentiment Analysis")
+st.title("🛒 Product Comparison with City-Specific Supplier Prices")
 
 # Load Data
 @st.cache_data
@@ -112,8 +111,8 @@ if st.button("🔍 Compare Products"):
     st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
     sentiment_table = pd.DataFrame({
         "Aspect": ["Positive Sentiments", "Negative Sentiments"],
-        title_1: sentiment_1.split("\n"),
-        title_2: sentiment_2.split("\n")
+        title_1: [sentiment_1 if sentiment_1 else "", ""],
+        title_2: [sentiment_2 if sentiment_2 else "", ""]
     })
     st.table(sentiment_table)
 
@@ -126,7 +125,7 @@ if st.button("🔍 Compare Products"):
         for source, url in zip(["Amazon", "Flipkart"], urls):
             price_comparison.append({"Product": product, "Source": source, "Price": "N/A", "Store Link": f"[Buy Now]({url})"})
 
-    # Local Supplier Prices (De-duplicate entries)
+    # Local Supplier Prices (Filtered by City)
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) & 
         (supplier_data["City"] == selected_city)
