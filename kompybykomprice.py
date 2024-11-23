@@ -65,7 +65,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with City-Specific Supplier Prices")
+st.title("🛒 Product Comparison with Sentiment Analysis and City-Specific Prices")
 
 # Load Data
 @st.cache_data
@@ -108,12 +108,31 @@ if st.button("🔍 Compare Products"):
     sentiment_1 = analyze_reviews_with_gpt(reviews_1)
     sentiment_2 = analyze_reviews_with_gpt(reviews_2)
 
-    st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
+    # Split Sentiments into Positive and Negative
+    positive_sentiments_1 = []
+    negative_sentiments_1 = []
+    positive_sentiments_2 = []
+    negative_sentiments_2 = []
+
+    # Process Sentiments for Product 1
+    if "Positive Sentiments:" in sentiment_1:
+        positive_sentiments_1 = sentiment_1.split("Positive Sentiments:")[1].split("Negative Sentiments:")[0].strip().split("\n")
+    if "Negative Sentiments:" in sentiment_1:
+        negative_sentiments_1 = sentiment_1.split("Negative Sentiments:")[1].strip().split("\n")
+
+    # Process Sentiments for Product 2
+    if "Positive Sentiments:" in sentiment_2:
+        positive_sentiments_2 = sentiment_2.split("Positive Sentiments:")[1].split("Negative Sentiments:")[0].strip().split("\n")
+    if "Negative Sentiments:" in sentiment_2:
+        negative_sentiments_2 = sentiment_2.split("Negative Sentiments:")[1].strip().split("\n")
+
+    # Create Sentiment Table
     sentiment_table = pd.DataFrame({
-        "Aspect": ["Positive Sentiments", "Negative Sentiments"],
-        title_1: [sentiment_1 if sentiment_1 else "", ""],
-        title_2: [sentiment_2 if sentiment_2 else "", ""]
+        "Aspect": ["Positive Sentiments"] * len(positive_sentiments_1) + ["Negative Sentiments"] * len(negative_sentiments_1),
+        title_1: positive_sentiments_1 + negative_sentiments_1,
+        title_2: positive_sentiments_2 + negative_sentiments_2
     })
+    st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
     st.table(sentiment_table)
 
     # Price Comparison Table
