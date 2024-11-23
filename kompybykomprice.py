@@ -5,6 +5,7 @@ import random
 import streamlit as st
 import matplotlib.pyplot as plt
 import openai
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
@@ -20,15 +21,16 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
-# ScraperAPI Wrapper Function
+# ScraperAPI Wrapper Function with Retry
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
-    """Scrape a webpage using ScraperAPI."""
+    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
-        headers = {"User-Agent": random.choice(USER_AGENTS)}  # Random User Agent
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
 
-        response = requests.get(api_url, headers=headers, timeout=30)
-        response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
+        response = requests.get(api_url, headers=headers, timeout=60)
+        response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
 
@@ -43,8 +45,7 @@ def scrape_page_with_scraperapi(url):
         return {"title": title, "reviews": reviews}
 
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping {url} via ScraperAPI: {e}")
-        return {"title": "Error", "reviews": ["Failed to fetch page"]}
+        raise Exception(f"Error scraping {url} via ScraperAPI: {e}")
 
 # Sentiment Analysis Using OpenAI
 def analyze_reviews_with_gpt(reviews):
