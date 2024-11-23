@@ -9,8 +9,8 @@ import openai
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# ScraperAPI Key (Add your ScraperAPI key in Streamlit secrets or directly here)
-SCRAPER_API_KEY = st.secrets["scraper_api_key"]
+# ScraperAPI Key from Streamlit Secrets
+SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
 
 # User-Agent List for Rotation
 USER_AGENTS = [
@@ -67,7 +67,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with ScraperAPI Integration")
+st.title("🛒 Product Comparison with City-Specific Supplier Prices")
 
 # Load Data
 @st.cache_data
