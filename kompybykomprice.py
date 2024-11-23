@@ -49,11 +49,11 @@ def parse_amazon_page(soup):
         price = price.text.replace(",", "").strip() if price else "Price not found"
 
         features = soup.find_all("span", {"class": "a-list-item"})
-        features = [feature.text.strip() for feature in features] if features else []
+        features = [feature.text.strip() for feature in features] if features else ["No additional features"]
 
         return {"title": title, "price": price, "features": features}
     except Exception:
-        return {"title": "Error", "price": "Error", "features": []}
+        return {"title": "Error", "price": "Error", "features": ["No additional features"]}
 
 def parse_flipkart_page(soup):
     try:
@@ -64,11 +64,11 @@ def parse_flipkart_page(soup):
         price = price.text.replace("₹", "").replace(",", "").strip() if price else "Price not found"
 
         features = soup.find_all("li", {"class": "_21Ahn-"})
-        features = [feature.text.strip() for feature in features] if features else []
+        features = [feature.text.strip() for feature in features] if features else ["No additional features"]
 
         return {"title": title, "price": price, "features": features}
     except Exception:
-        return {"title": "Error", "price": "Error", "features": []}
+        return {"title": "Error", "price": "Error", "features": ["No additional features"]}
 
 def scrape_products(urls):
     loop = asyncio.new_event_loop()
@@ -77,7 +77,7 @@ def scrape_products(urls):
     results = []
     for soup, url in zip(soups, urls):
         if not soup:
-            results.append({"title": "Error", "price": "Error", "features": []})
+            results.append({"title": "Error", "price": "Error", "features": ["No additional features"]})
             continue
         if "amazon" in url:
             results.append(parse_amazon_page(soup))
@@ -132,34 +132,37 @@ if st.button("Show Comparison"):
     }
     st.table(pd.DataFrame(comparison_data))
 
-    # Sentiment Analysis
+    # Sentiment Analysis Table
     st.markdown("### Sentiment Analysis")
-    st.write(f"**{product_1} Sentiment Analysis:**")
-    st.text(analyze_with_gpt(data_1[0]["title"], data_1[0]["features"]))
-    st.write(f"**{product_2} Sentiment Analysis:**")
-    st.text(analyze_with_gpt(data_2[0]["title"], data_2[0]["features"]))
+    sentiment_data = {
+        "Product": [product_1, product_2],
+        "Likes & Dislikes": [analyze_with_gpt(data_1[0]["title"], data_1[0]["features"]), 
+                             analyze_with_gpt(data_2[0]["title"], data_2[0]["features"])]
+    }
+    st.table(pd.DataFrame(sentiment_data))
 
-    # Price Table with Percentage Difference
-    st.markdown("### Price Comparison Across Stores")
+    # Price Table with Percentage Difference and Local Supplier Prices
+    st.markdown("### Price Comparison Across Stores and Suppliers")
     price_comparison = []
-    for product, data in zip([product_1, product_2], [data_1, data_2]):
-        for source, url in zip(["Amazon", "Flipkart"], urls_1 + urls_2):
+    for product, data, urls in zip([product_1, product_2], [data_1, data_2], [urls_1, urls_2]):
+        for source, url in zip(["Amazon", "Flipkart"], urls):
             price = data[0]["price"]
-            price_comparison.append({"Product": product, "Source": source, "Price": price, "URL": url})
+            price_comparison.append({"Product": product, "Source": source, "Price": price, "URL": f"[Buy Now]({url})"})
+
+    supplier_info = supplier_data[(supplier_data["Product Name"].isin([product_1, product_2]))]
+    for _, row in supplier_info.iterrows():
+        price_comparison.append({
+            "Product": row["Product Name"],
+            "Source": row["Supplier Name"],
+            "Price": row["Price"],
+            "URL": f"[Address]({row['Address']})"
+        })
 
     price_df = pd.DataFrame(price_comparison)
     price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
     min_price = price_df["Price"].min()
     price_df["Price Difference (%)"] = ((price_df["Price"] - min_price) / min_price) * 100
     st.table(price_df)
-
-    # Local Supplier Information
-    st.markdown("### Local Supplier Information")
-    selected_city = st.selectbox("Select Your City", city_list["City"].unique().tolist())
-    supplier_info = supplier_data[(supplier_data["City"] == selected_city) &
-                                   (supplier_data["Product Name"].isin([product_1, product_2]))]
-    supplier_info["Cheapest"] = supplier_info["Price"] == supplier_info["Price"].min()
-    st.table(supplier_info)
 
     # Price Comparison Graph
     st.markdown("### Price Comparison Graph")
