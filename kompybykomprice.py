@@ -102,8 +102,12 @@ def analyze_with_gpt(title, features):
     except Exception:
         return "- Error generating sentiment analysis."
 
+# Pad features list to ensure consistent lengths
+def pad_list(data, length=10):
+    return data + [""] * (length - len(data))
+
 # Streamlit App
-st.title("Detailed Product Comparison App")
+st.title("🛒 Detailed Product Comparison App")
 
 # Step 1: Select Category and Products
 categories = product_data["Category"].unique().tolist()
@@ -115,25 +119,29 @@ product_1 = st.selectbox("Select Product 1", products)
 product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
 # Step 2: Scrape and Compare
-if st.button("Show Comparison"):
+if st.button("🔍 Show Comparison"):
     urls_1 = filtered_products[filtered_products["Product Name"] == product_1]["Product URL"].tolist()
     urls_2 = filtered_products[filtered_products["Product Name"] == product_2]["Product URL"].tolist()
 
-    st.write("Scraping Product Data...")
+    st.write("🚀 Scraping Product Data...")
     data_1 = scrape_products(urls_1)
     data_2 = scrape_products(urls_2)
 
     # Feature Comparison Table
-    st.markdown("### Feature Comparison")
+    st.markdown("### 🧩 Feature Comparison")
+    data_1_features = pad_list(data_1[0]["features"], 10)
+    data_2_features = pad_list(data_2[0]["features"], 10)
+
     comparison_data = {
         "Feature": ["Title", "Price"] + [f"Feature {i+1}" for i in range(10)],
-        product_1: [data_1[0]["title"], data_1[0]["price"]] + data_1[0]["features"][:10],
-        product_2: [data_2[0]["title"], data_2[0]["price"]] + data_2[0]["features"][:10]
+        product_1: [data_1[0]["title"], data_1[0]["price"]] + data_1_features,
+        product_2: [data_2[0]["title"], data_2[0]["price"]] + data_2_features,
     }
-    st.table(pd.DataFrame(comparison_data))
+    comparison_df = pd.DataFrame(comparison_data)
+    st.table(comparison_df)
 
     # Sentiment Analysis Table
-    st.markdown("### Sentiment Analysis")
+    st.markdown("### 😊 Sentiment Analysis")
     likes_dislikes_1 = analyze_with_gpt(data_1[0]["title"], data_1[0]["features"])
     likes_dislikes_2 = analyze_with_gpt(data_2[0]["title"], data_2[0]["features"])
     sentiment_data = {
@@ -142,8 +150,8 @@ if st.button("Show Comparison"):
     }
     st.table(pd.DataFrame(sentiment_data))
 
-    # Price Table with Percentage Difference and Local Supplier Prices
-    st.markdown("### Price Comparison Across Stores and Suppliers")
+    # Price Table with Local Suppliers
+    st.markdown("### 💰 Price Comparison Across Stores and Suppliers")
     price_comparison = []
     for product, data, urls in zip([product_1, product_2], [data_1, data_2], [urls_1, urls_2]):
         for source, url in zip(["Amazon", "Flipkart"], urls):
@@ -166,7 +174,7 @@ if st.button("Show Comparison"):
     st.table(price_df)
 
     # Price Comparison Graph
-    st.markdown("### Price Comparison Graph")
+    st.markdown("### 📊 Price Comparison Graph")
     if not price_df.empty:
         fig, ax = plt.subplots()
         price_df.groupby("Source")["Price"].mean().plot(kind="bar", ax=ax, title="Price Comparison")
