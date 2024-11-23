@@ -1,16 +1,12 @@
 import pandas as pd
-import requests
-from bs4 import BeautifulSoup
 import streamlit as st
-import matplotlib.pyplot as plt
-import asyncio
-import aiohttp
 import openai
-import time  # Added for delay between requests
+from playwright.async_api import async_playwright
+import asyncio
+import random
+import matplotlib.pyplot as plt
 
 # API Configurations
-SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
-SCRAPER_API_URL = "http://api.scraperapi.com"
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
 # Load Data
@@ -22,69 +18,60 @@ product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
 city_list = pd.read_csv("city_List_test.csv")
 
-# Asynchronous Scraping with Delay
-async def scrape_url(session, url):
-    """Scrape a single URL asynchronously using ScraperAPI with a delay."""
+# User-Agent List
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/89.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
+]
+
+# Function to scrape with Playwright
+async def scrape_page(url, latitude=28.4595, longitude=77.0266):
+    """Scrape a single page using Playwright with geolocation and user agent."""
     try:
-        params = {"api_key": SCRAPER_API_KEY, "url": url}
-        async with session.get(SCRAPER_API_URL, params=params, timeout=20) as response:
-            html = await response.text()
-            await asyncio.sleep(2)  # Introduce a delay of 2 seconds between requests
-            return BeautifulSoup(html, "html.parser")
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent=random.choice(USER_AGENTS),  # Random User Agent
+                geolocation={"latitude": latitude, "longitude": longitude},  # Geolocation
+                permissions=["geolocation"],  # Allow geolocation
+            )
+            page = await context.new_page()
+            await page.goto(url, timeout=60000)  # 60 seconds timeout
+
+            # Wait for the main content to load
+            await page.wait_for_load_state("networkidle")
+
+            # Extract title and reviews
+            title = await page.text_content('span[id="productTitle"]') or "Title not found"
+            reviews = await page.eval_on_selector_all(
+                'span[data-hook="review-body"]',
+                "elements => elements.map(el => el.textContent.trim())",
+            )
+
+            # Close browser
+            await browser.close()
+
+            return {"title": title.strip(), "reviews": reviews}
     except Exception as e:
-        return None
+        return {"title": "Error", "reviews": [f"Failed to fetch page: {e}"]}
 
-async def scrape_concurrently(urls):
-    """Scrape multiple URLs concurrently with a delay."""
-    async with aiohttp.ClientSession() as session:
-        tasks = [scrape_url(session, url) for url in urls]
-        return await asyncio.gather(*tasks)
+async def scrape_multiple_pages(urls):
+    """Scrape multiple pages concurrently."""
+    tasks = [scrape_page(url) for url in urls]
+    return await asyncio.gather(*tasks)
 
-# Parsing Functions
-def parse_amazon_page(soup):
-    """Parse Amazon product page for title and reviews."""
+# Format Prices
+def format_price(price):
     try:
-        title = soup.find("span", {"id": "productTitle"})
-        title = title.text.strip() if title else "Title not found"
+        return f"{float(price):,.2f}"
+    except ValueError:
+        return "N/A"
 
-        reviews = soup.find_all("span", {"data-hook": "review-body"})
-        reviews = [review.text.strip() for review in reviews if review] if reviews else ["No reviews found"]
-
-        return {"title": title, "reviews": reviews}
-    except Exception:
-        return {"title": "Error", "reviews": ["Error parsing reviews"]}
-
-def parse_flipkart_page(soup):
-    """Parse Flipkart product page for title and reviews."""
-    try:
-        title = soup.find("span", {"class": "B_NuCI"})
-        title = title.text.strip() if title else "Title not found"
-
-        reviews = soup.find_all("div", {"class": "t-ZTKy"})
-        reviews = [review.text.strip() for review in reviews if review] if reviews else ["No reviews found"]
-
-        return {"title": title, "reviews": reviews}
-    except Exception:
-        return {"title": "Error", "reviews": ["Error parsing reviews"]}
-
-def scrape_products(urls):
-    """Scrape titles and reviews for a list of URLs."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    soups = loop.run_until_complete(scrape_concurrently(urls))
-    results = []
-    for soup, url in zip(soups, urls):
-        if not soup:
-            results.append({"title": "Error", "reviews": ["Failed to fetch page"]})
-            continue
-        if "amazon" in url:
-            results.append(parse_amazon_page(soup))
-        elif "flipkart" in url:
-            results.append(parse_flipkart_page(soup))
-    return results
-
+# Sentiment Analysis
 def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews and return a sentiment summary."""
+    """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points "
@@ -101,15 +88,8 @@ def analyze_reviews_with_gpt(reviews):
     except Exception as e:
         return f"- Error generating sentiment analysis: {e}"
 
-def format_price(price):
-    """Format price to two decimal places."""
-    try:
-        return f"{float(price):,.2f}"
-    except ValueError:
-        return "N/A"
-
 # Streamlit App
-st.title("🛒 Product Comparison with City-Specific Prices and Sentiment Analysis")
+st.title("🛒 Product Comparison with Location-Based Scraping")
 
 # Select City
 cities = city_list["City"].unique().tolist()
@@ -130,17 +110,19 @@ if st.button("🔍 Show Comparison"):
     urls_2 = filtered_products[filtered_products["Product Name"] == product_2]["Product URL"].tolist()
 
     st.write("🚀 Scraping Product Data...")
-    scraped_data_1 = scrape_products(urls_1)
-    scraped_data_2 = scrape_products(urls_2)
 
-    # Titles
+    # Scrape products concurrently
+    scraped_data_1 = asyncio.run(scrape_multiple_pages(urls_1))
+    scraped_data_2 = asyncio.run(scrape_multiple_pages(urls_2))
+
+    # Extract Titles
     title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
     title_2 = scraped_data_2[0]["title"] if scraped_data_2 else "No title found"
 
     st.markdown(f"### Product 1: {title_1}")
     st.markdown(f"### Product 2: {title_2}")
 
-    # Sentiment Analysis
+    # Analyze Reviews
     reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
     reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
 
