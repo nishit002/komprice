@@ -32,7 +32,7 @@ async def scrape_url(session, url):
         async with session.get(SCRAPER_API_URL, params=params, timeout=20) as response:
             html = await response.text()
             return BeautifulSoup(html, "html.parser")
-    except Exception as e:
+    except Exception:
         return None
 
 async def scrape_concurrently(urls):
@@ -85,25 +85,9 @@ def scrape_products(urls):
             results.append(parse_flipkart_page(soup))
     return results
 
-# Sentiment Analysis
-def analyze_with_gpt(title, features):
-    try:
-        prompt = (
-            f"The product title is: {title}.\n"
-            f"Features: {features}.\n"
-            "Provide a bullet-point summary of likes and dislikes."
-        )
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "You are an expert analyst."}, {"role": "user", "content": prompt}],
-            max_tokens=500,
-        )
-        return response['choices'][0]['message']['content']
-    except Exception:
-        return "- Error generating sentiment analysis."
-
 # Pad features list to ensure consistent lengths
 def pad_list(data, length=10):
+    """Ensure lists have consistent length by padding with empty strings."""
     return data + [""] * (length - len(data))
 
 # Streamlit App
@@ -127,11 +111,12 @@ if st.button("🔍 Show Comparison"):
     data_1 = scrape_products(urls_1)
     data_2 = scrape_products(urls_2)
 
-    # Feature Comparison Table
-    st.markdown("### 🧩 Feature Comparison")
+    # Ensure consistent lengths for feature lists
     data_1_features = pad_list(data_1[0]["features"], 10)
     data_2_features = pad_list(data_2[0]["features"], 10)
 
+    # Feature Comparison Table
+    st.markdown("### 🧩 Feature Comparison")
     comparison_data = {
         "Feature": ["Title", "Price"] + [f"Feature {i+1}" for i in range(10)],
         product_1: [data_1[0]["title"], data_1[0]["price"]] + data_1_features,
@@ -139,16 +124,6 @@ if st.button("🔍 Show Comparison"):
     }
     comparison_df = pd.DataFrame(comparison_data)
     st.table(comparison_df)
-
-    # Sentiment Analysis Table
-    st.markdown("### 😊 Sentiment Analysis")
-    likes_dislikes_1 = analyze_with_gpt(data_1[0]["title"], data_1[0]["features"])
-    likes_dislikes_2 = analyze_with_gpt(data_2[0]["title"], data_2[0]["features"])
-    sentiment_data = {
-        "Product": [product_1, product_2],
-        "Likes & Dislikes": [likes_dislikes_1, likes_dislikes_2]
-    }
-    st.table(pd.DataFrame(sentiment_data))
 
     # Price Table with Local Suppliers
     st.markdown("### 💰 Price Comparison Across Stores and Suppliers")
