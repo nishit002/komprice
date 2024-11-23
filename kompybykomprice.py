@@ -52,9 +52,8 @@ def analyze_reviews_with_gpt(reviews):
     """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
-            "Analyze the following customer reviews and provide a summary in bullet points "
-            "for what customers like (positive sentiment) and dislike (negative sentiment):\n"
-            f"Reviews: {reviews}"
+            "Analyze the following customer reviews and provide a summary in bullet points for: "
+            "1. Positive Sentiments\n2. Negative Sentiments\nReviews:\n" + "\n".join(reviews)
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -67,7 +66,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with City-Specific Supplier Prices")
+st.title("🛒 Product Comparison with Enhanced Sentiment Analysis")
 
 # Load Data
 @st.cache_data
@@ -111,10 +110,12 @@ if st.button("🔍 Compare Products"):
     sentiment_2 = analyze_reviews_with_gpt(reviews_2)
 
     st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
-    st.markdown(f"#### {title_1}")
-    st.markdown(sentiment_1)
-    st.markdown(f"#### {title_2}")
-    st.markdown(sentiment_2)
+    sentiment_table = pd.DataFrame({
+        "Aspect": ["Positive Sentiments", "Negative Sentiments"],
+        title_1: sentiment_1.split("\n"),
+        title_2: sentiment_2.split("\n")
+    })
+    st.table(sentiment_table)
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
@@ -125,11 +126,11 @@ if st.button("🔍 Compare Products"):
         for source, url in zip(["Amazon", "Flipkart"], urls):
             price_comparison.append({"Product": product, "Source": source, "Price": "N/A", "Store Link": f"[Buy Now]({url})"})
 
-    # Local Supplier Prices
+    # Local Supplier Prices (De-duplicate entries)
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) & 
         (supplier_data["City"] == selected_city)
-    ]
+    ].drop_duplicates(subset=["Product Name", "Supplier Name"])
     for _, row in supplier_info.iterrows():
         price_comparison.append({
             "Product": row["Product Name"],
