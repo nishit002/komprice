@@ -91,7 +91,7 @@ def analyze_with_gpt(title, features):
         prompt = (
             f"The product title is: {title}.\n"
             f"Features: {features}.\n"
-            "Provide a detailed sentiment analysis, including likes and dislikes."
+            "Provide a bullet-point summary of likes and dislikes."
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -100,7 +100,7 @@ def analyze_with_gpt(title, features):
         )
         return response['choices'][0]['message']['content']
     except Exception:
-        return "Error generating sentiment analysis."
+        return "- Error generating sentiment analysis."
 
 # Streamlit App
 st.title("Detailed Product Comparison App")
@@ -134,10 +134,11 @@ if st.button("Show Comparison"):
 
     # Sentiment Analysis Table
     st.markdown("### Sentiment Analysis")
+    likes_dislikes_1 = analyze_with_gpt(data_1[0]["title"], data_1[0]["features"])
+    likes_dislikes_2 = analyze_with_gpt(data_2[0]["title"], data_2[0]["features"])
     sentiment_data = {
         "Product": [product_1, product_2],
-        "Likes & Dislikes": [analyze_with_gpt(data_1[0]["title"], data_1[0]["features"]), 
-                             analyze_with_gpt(data_2[0]["title"], data_2[0]["features"])]
+        "Likes & Dislikes": [likes_dislikes_1, likes_dislikes_2]
     }
     st.table(pd.DataFrame(sentiment_data))
 
@@ -147,7 +148,7 @@ if st.button("Show Comparison"):
     for product, data, urls in zip([product_1, product_2], [data_1, data_2], [urls_1, urls_2]):
         for source, url in zip(["Amazon", "Flipkart"], urls):
             price = data[0]["price"]
-            price_comparison.append({"Product": product, "Source": source, "Price": price, "URL": f"[Buy Now]({url})"})
+            price_comparison.append({"Product": product, "Source": source, "Price": price, "Store Link": f"[Buy Now]({url})"})
 
     supplier_info = supplier_data[(supplier_data["Product Name"].isin([product_1, product_2]))]
     for _, row in supplier_info.iterrows():
@@ -155,7 +156,7 @@ if st.button("Show Comparison"):
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": row["Price"],
-            "URL": f"[Address]({row['Address']})"
+            "Store Link": f"[Address]({row['Address']})"
         })
 
     price_df = pd.DataFrame(price_comparison)
