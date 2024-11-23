@@ -12,15 +12,13 @@ SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
 SCRAPER_API_URL = "http://api.scraperapi.com"
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# Load data dynamically
+# Load Data
 @st.cache_data
 def load_data(file_path):
     return pd.read_csv(file_path)
 
-# Load datasets
 product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
-city_list = load_data("city_List_test.csv")
 
 # Asynchronous Scraping
 async def scrape_url(session, url):
@@ -33,7 +31,8 @@ async def scrape_url(session, url):
         async with session.get(SCRAPER_API_URL, params=params, timeout=20) as response:
             html = await response.text()
             return BeautifulSoup(html, "html.parser")
-    except Exception:
+    except Exception as e:
+        st.error(f"Error scraping {url}: {e}")
         return None
 
 async def scrape_concurrently(urls):
@@ -42,7 +41,6 @@ async def scrape_concurrently(urls):
         tasks = [scrape_url(session, url) for url in urls]
         return await asyncio.gather(*tasks)
 
-# Parsing Functions
 def parse_amazon_page(soup):
     """Parse Amazon page for title and reviews."""
     try:
@@ -53,8 +51,8 @@ def parse_amazon_page(soup):
         reviews = [review.text.strip() for review in reviews if review] if reviews else ["No reviews found"]
 
         return {"title": title, "reviews": reviews}
-    except Exception as e:
-        return {"title": "Error", "reviews": [f"Error parsing reviews: {e}"]}
+    except Exception:
+        return {"title": "Error", "reviews": ["Error parsing reviews"]}
 
 def parse_flipkart_page(soup):
     """Parse Flipkart page for title and reviews."""
@@ -66,8 +64,8 @@ def parse_flipkart_page(soup):
         reviews = [review.text.strip() for review in reviews if review] if reviews else ["No reviews found"]
 
         return {"title": title, "reviews": reviews}
-    except Exception as e:
-        return {"title": "Error", "reviews": [f"Error parsing reviews: {e}"]}
+    except Exception:
+        return {"title": "Error", "reviews": ["Error parsing reviews"]}
 
 def scrape_products(urls):
     """Scrape titles and reviews for a list of URLs."""
@@ -85,24 +83,12 @@ def scrape_products(urls):
             results.append(parse_flipkart_page(soup))
     return results
 
-# Sentiment Analysis
-def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews and return a sentiment summary."""
+def format_price(price):
+    """Format price to two decimal places."""
     try:
-        prompt = (
-            "Analyze the following customer reviews and provide a summary in bullet points "
-            "for what customers like (positive sentiment) and dislike (negative sentiment):\n"
-            f"Reviews: {reviews}"
-        )
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "You are a sentiment analysis expert."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=300,
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"- Error generating sentiment analysis: {e}"
+        return f"{float(price):,.2f}"
+    except ValueError:
+        return "N/A"
 
 # Streamlit App
 st.title("🛒 Product Comparison with Reviews and Sentiment Analysis")
@@ -125,49 +111,47 @@ if st.button("🔍 Show Comparison"):
     scraped_data_1 = scrape_products(urls_1)
     scraped_data_2 = scrape_products(urls_2)
 
-    # Display Titles
+    # Titles
     title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
     title_2 = scraped_data_2[0]["title"] if scraped_data_2 else "No title found"
+
     st.markdown(f"### Product 1: {title_1}")
     st.markdown(f"### Product 2: {title_2}")
 
     # Sentiment Analysis
-    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
-    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
+    st.markdown("### 😊 Customer Reviews")
+    st.markdown(f"#### {title_1}")
+    st.markdown(f"- {scraped_data_1[0]['reviews'][0] if scraped_data_1 else 'No reviews available'}")
+    st.markdown(f"#### {title_2}")
+    st.markdown(f"- {scraped_data_2[0]['reviews'][0] if scraped_data_2 else 'No reviews available'}")
 
-    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
-    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
-
-    st.markdown("### Sentiment Analysis")
-    st.markdown(f"**{title_1}**\n{sentiment_1}")
-    st.markdown(f"**{title_2}**\n{sentiment_2}")
-
-    # Price Comparison Table
+    # Price Comparison
     st.markdown("### 💰 Price Comparison Across Stores and Suppliers")
     price_comparison = []
+
+    # Online Store Prices
     for product, data, urls in zip([product_1, product_2], [scraped_data_1, scraped_data_2], [urls_1, urls_2]):
         for source, url in zip(["Amazon", "Flipkart"], urls):
-            price = data[0]["reviews"] if data else "Price not found"
-            price_comparison.append({"Product": product, "Source": source, "Price": price, "Store Link": f"[Buy Now]({url})"})
+            price_comparison.append({"Product": product, "Source": source, "Price": "N/A", "Store Link": f"[Buy Now]({url})"})
 
+    # Local Supplier Prices
     supplier_info = supplier_data[(supplier_data["Product Name"].isin([product_1, product_2]))]
     for _, row in supplier_info.iterrows():
         price_comparison.append({
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
-            "Price": row["Price"],
+            "Price": format_price(row["Price"]),
             "Store Link": f"[Address]({row['Address']})"
         })
 
+    # Create DataFrame for Display
     price_df = pd.DataFrame(price_comparison)
-    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-    min_price = price_df["Price"].min()
-    price_df["Price Difference (%)"] = ((price_df["Price"] - min_price) / min_price) * 100
     st.table(price_df)
 
     # Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
-    if not price_df.empty:
+    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+    if not price_df["Price"].isna().all():
         fig, ax = plt.subplots()
         price_df.groupby("Source")["Price"].mean().plot(kind="bar", ax=ax, title="Price Comparison")
         ax.set_ylabel("Price")
