@@ -129,9 +129,9 @@ if st.button("🔍 Compare Products"):
 
     # Create Sentiment Table
     sentiment_table = pd.DataFrame({
-        "Aspect": ["Positive Sentiments"] * len(positive_sentiments_1) + ["Negative Sentiments"] * len(negative_sentiments_1),
+        "Aspect": ["Positive Sentiments"] * len(positive_sentiments_1 + negative_sentiments_1),
         title_1: positive_sentiments_1 + negative_sentiments_1,
-        title_2: positive_sentiments_2 + negative_sentiments_2
+        title_2: (positive_sentiments_2 + negative_sentiments_2)[:len(positive_sentiments_1 + negative_sentiments_1)]
     })
     st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
     st.table(sentiment_table)
