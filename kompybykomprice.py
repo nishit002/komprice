@@ -133,7 +133,7 @@ if st.button("🔍 Compare Products"):
         "Aspect": ["Negative Sentiments"],
         title_1: [dislikes_1],
         title_2: [dislikes_2]
-    })
+        })
     st.table(dislikes_table)
 
     # Price Comparison Table
@@ -143,7 +143,12 @@ if st.button("🔍 Compare Products"):
     # Online Store Prices
     for product, data, urls in zip([product_1, product_2], [scraped_data_1, scraped_data_2], [urls_1, urls_2]):
         for source, url in zip(["Amazon", "Flipkart"], urls):
-            price_comparison.append({"Product": product, "Source": source, "Price": "N/A", "Store Link": f"[Buy Now]({url})"})
+            price_comparison.append({
+                "Product": product,
+                "Source": source,
+                "Price": data[0]["price"] if data else "N/A",
+                "Store Link": f"[Buy Now]({url})"
+            })
 
     # Local Supplier Prices (Filtered by City)
     supplier_info = supplier_data[
