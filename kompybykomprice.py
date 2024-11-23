@@ -1,14 +1,18 @@
 import pandas as pd
-import streamlit as st
-import openai
-from playwright.sync_api import sync_playwright
+import requests
+from bs4 import BeautifulSoup
 import random
+import streamlit as st
 import matplotlib.pyplot as plt
+import openai
 
-# API Configurations
+# OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# User-Agent List
+# ScraperAPI Key (Add your ScraperAPI key in Streamlit secrets or directly here)
+SCRAPER_API_KEY = st.secrets["scraper_api_key"]
+
+# User-Agent List for Rotation
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
@@ -16,67 +20,36 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
-# Function to scrape with Playwright
-def scrape_page(url):
-    """Scrape a single page using Playwright with a visible browser and IP rotation."""
+# ScraperAPI Wrapper Function
+def scrape_page_with_scraperapi(url):
+    """Scrape a webpage using ScraperAPI."""
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)  # Non-headless browser
-            context = browser.new_context(
-                user_agent=random.choice(USER_AGENTS),  # Random User Agent
-            )
-            page = context.new_page()
+        # Construct ScraperAPI URL
+        api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
+        headers = {"User-Agent": random.choice(USER_AGENTS)}  # Random User Agent
 
-            # Go to the URL
-            st.write(f"Navigating to {url}...")
-            page.goto(url, timeout=120000)
+        response = requests.get(api_url, headers=headers, timeout=30)
+        response.raise_for_status()  # Raise an error for bad responses (4xx, 5xx)
 
-            # Wait for the page to load
-            st.write("Waiting for the page to load...")
-            page.wait_for_load_state("networkidle")
+        soup = BeautifulSoup(response.text, "html.parser")
 
-            # Extract title
-            try:
-                title = page.text_content('span[id="productTitle"]') or "Title not found"
-                title = title.strip()
-            except Exception as e:
-                st.write(f"Error extracting title: {e}")
-                title = "Error extracting title"
+        # Extract Title
+        title = soup.find("span", {"id": "productTitle"})
+        title = title.text.strip() if title else "Title not found"
 
-            # Extract reviews
-            try:
-                reviews = page.locator('span[data-hook="review-body"]').all_text_contents()
-                reviews = reviews if reviews else ["No reviews found"]
-            except Exception as e:
-                st.write(f"Error extracting reviews: {e}")
-                reviews = ["Error extracting reviews"]
+        # Extract Reviews
+        reviews = soup.find_all("span", {"data-hook": "review-body"})
+        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-            browser.close()
+        return {"title": title, "reviews": reviews}
 
-            return {"title": title, "reviews": reviews}
-
-    except Exception as e:
-        st.error(f"Failed to scrape {url}: {e}")
-        return {"title": "Error", "reviews": [f"Failed to fetch page: {e}"]}
-
-# Function to refresh IP (using a proxy service)
-def refresh_ip():
-    """Simulates refreshing the IP by reconfiguring the proxy (requires proxy setup)."""
-    st.write("Refreshing IP...")
-    # Use proxy service like ScraperAPI, BrightData, etc.
-    # Example: Set up a proxy in the Playwright context or your network.
-
-# Function to fetch data for multiple pages
-def scrape_multiple_pages(urls):
-    results = []
-    for url in urls:
-        refresh_ip()  # Refresh IP before each request
-        result = scrape_page(url)
-        results.append(result)
-    return results
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error scraping {url} via ScraperAPI: {e}")
+        return {"title": "Error", "reviews": ["Failed to fetch page"]}
 
 # Sentiment Analysis Using OpenAI
 def analyze_reviews_with_gpt(reviews):
+    """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points "
@@ -94,7 +67,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with IP Refreshing")
+st.title("🛒 Product Comparison with ScraperAPI Integration")
 
 # Load Data
 @st.cache_data
@@ -102,6 +75,12 @@ def load_data(file_path):
     return pd.read_csv(file_path)
 
 product_data = load_data("Product_URL_Test.csv")
+supplier_data = load_data("Supplier_Info_prices.csv")
+city_list = pd.read_csv("city_List_test.csv")
+
+# Select City
+cities = city_list["City"].unique().tolist()
+selected_city = st.selectbox("Select Your City", cities)
 
 # Select Products for Comparison
 products = product_data["Product Name"].unique().tolist()
@@ -113,9 +92,9 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape Product Data
-    st.write("🚀 Scraping Product Data...")
-    scraped_data_1 = scrape_multiple_pages(urls_1)
-    scraped_data_2 = scrape_multiple_pages(urls_2)
+    st.write("🚀 Scraping Product Data with ScraperAPI...")
+    scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
+    scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
     # Display Titles
     title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
@@ -136,3 +115,43 @@ if st.button("🔍 Compare Products"):
     st.markdown(sentiment_1)
     st.markdown(f"#### {title_2}")
     st.markdown(sentiment_2)
+
+    # Price Comparison Table
+    st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
+    price_comparison = []
+
+    # Online Store Prices
+    for product, data, urls in zip([product_1, product_2], [scraped_data_1, scraped_data_2], [urls_1, urls_2]):
+        for source, url in zip(["Amazon", "Flipkart"], urls):
+            price_comparison.append({"Product": product, "Source": source, "Price": "N/A", "Store Link": f"[Buy Now]({url})"})
+
+    # Local Supplier Prices
+    supplier_info = supplier_data[
+        (supplier_data["Product Name"].isin([product_1, product_2])) & 
+        (supplier_data["City"] == selected_city)
+    ]
+    for _, row in supplier_info.iterrows():
+        price_comparison.append({
+            "Product": row["Product Name"],
+            "Source": row["Supplier Name"],
+            "Price": f"{float(row['Price']):,.2f}",
+            "Store Link": f"[Address]({row['Address']})"
+        })
+
+    # Convert to DataFrame for Display
+    price_df = pd.DataFrame(price_comparison)
+    st.table(price_df)
+
+    # Plot Price Comparison Graph
+    st.markdown("### 📊 Price Comparison Graph")
+    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+    if not price_df["Price"].isna().all():
+        min_price = price_df["Price"].min()
+        price_df["Price Difference (%)"] = ((price_df["Price"] - min_price) / min_price) * 100
+
+        fig, ax = plt.subplots()
+        price_df.groupby("Source")["Price Difference (%)"].mean().plot(kind="bar", ax=ax, color="skyblue")
+        ax.set_title("Price Difference by Source")
+        ax.set_ylabel("Price Difference (%)")
+        ax.set_xlabel("Source")
+        st.pyplot(fig)
