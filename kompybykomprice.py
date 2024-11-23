@@ -42,7 +42,11 @@ def scrape_page_with_scraperapi(url):
         reviews = soup.find_all("span", {"data-hook": "review-body"})
         reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        return {"title": title, "reviews": reviews}
+        # Extract Price
+        price = soup.find("span", {"id": "priceblock_ourprice"}) or soup.find("span", {"id": "priceblock_dealprice"})
+        price = price.text.strip() if price else "Price not found"
+
+        return {"title": title, "reviews": reviews, "price": price}
 
     except requests.exceptions.RequestException as e:
         raise Exception(f"Error scraping {url} via ScraperAPI: {e}")
@@ -95,12 +99,15 @@ if st.button("🔍 Compare Products"):
     scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
     scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
-    # Display Titles
+    # Display Titles and Prices
     title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
     title_2 = scraped_data_2[0]["title"] if scraped_data_2 else "No title found"
 
-    st.markdown(f"### Product 1: {title_1}")
-    st.markdown(f"### Product 2: {title_2}")
+    price_1 = scraped_data_1[0]["price"] if scraped_data_1 else "Price not found"
+    price_2 = scraped_data_2[0]["price"] if scraped_data_2 else "Price not found"
+
+    st.markdown(f"### Product 1: {title_1} - {price_1}")
+    st.markdown(f"### Product 2: {title_2} - {price_2}")
 
     # Analyze Reviews
     reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
@@ -109,32 +116,25 @@ if st.button("🔍 Compare Products"):
     sentiment_1 = analyze_reviews_with_gpt(reviews_1)
     sentiment_2 = analyze_reviews_with_gpt(reviews_2)
 
-    # Split Sentiments into Positive and Negative
-    positive_sentiments_1 = []
-    negative_sentiments_1 = []
-    positive_sentiments_2 = []
-    negative_sentiments_2 = []
+    # Separate Likes and Dislikes
+    likes_1, dislikes_1 = sentiment_1.split("Negative Sentiments:")[0], sentiment_1.split("Negative Sentiments:")[1]
+    likes_2, dislikes_2 = sentiment_2.split("Negative Sentiments:")[0], sentiment_2.split("Negative Sentiments:")[1]
 
-    # Process Sentiments for Product 1
-    if "Positive Sentiments:" in sentiment_1:
-        positive_sentiments_1 = sentiment_1.split("Positive Sentiments:")[1].split("Negative Sentiments:")[0].strip().split("\n")
-    if "Negative Sentiments:" in sentiment_1:
-        negative_sentiments_1 = sentiment_1.split("Negative Sentiments:")[1].strip().split("\n")
-
-    # Process Sentiments for Product 2
-    if "Positive Sentiments:" in sentiment_2:
-        positive_sentiments_2 = sentiment_2.split("Positive Sentiments:")[1].split("Negative Sentiments:")[0].strip().split("\n")
-    if "Negative Sentiments:" in sentiment_2:
-        negative_sentiments_2 = sentiment_2.split("Negative Sentiments:")[1].strip().split("\n")
-
-    # Create Sentiment Table
-    sentiment_table = pd.DataFrame({
-        "Aspect": ["Positive Sentiments"] * len(positive_sentiments_1 + negative_sentiments_1),
-        title_1: positive_sentiments_1 + negative_sentiments_1,
-        title_2: (positive_sentiments_2 + negative_sentiments_2)[:len(positive_sentiments_1 + negative_sentiments_1)]
+    st.markdown("### 😊 Customer Reviews: Likes")
+    likes_table = pd.DataFrame({
+        "Aspect": ["Positive Sentiments"],
+        title_1: [likes_1],
+        title_2: [likes_2]
     })
-    st.markdown("### 😊 Customer Reviews and Sentiment Analysis")
-    st.table(sentiment_table)
+    st.table(likes_table)
+
+    st.markdown("### 😞 Customer Reviews: Dislikes")
+    dislikes_table = pd.DataFrame({
+        "Aspect": ["Negative Sentiments"],
+        title_1: [dislikes_1],
+        title_2: [dislikes_2]
+    })
+    st.table(dislikes_table)
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
