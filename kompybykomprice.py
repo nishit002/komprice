@@ -39,40 +39,54 @@ product_2 = st.selectbox("Select Product 2", [p for p in products if p != produc
 cities = city_list["City"].unique().tolist()
 selected_city = st.selectbox("Select Your City", cities)
 
+# Scraping with ScraperAPI
+def scrape_product_data_with_scraperapi(url):
+    try:
+        api_key = st.secrets["scraperapi"]["scraperapi_key"]
+        proxy_url = f"http://api.scraperapi.com?api_key={api_key}&url={url}"
+        response = requests.get(proxy_url, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Extract product details
+        if "amazon" in url:
+            title = soup.find("span", {"id": "productTitle"})
+            title = title.text.strip() if title else "Title not found"
+
+            features = soup.find_all("span", class_="a-list-item")
+            features = [f.text.strip() for f in features] if features else ["Features not found"]
+
+            price = soup.find("span", {"class": "a-price-whole"})
+            price = price.text.replace(",", "").strip() if price else "Price not found"
+
+        elif "flipkart" in url:
+            title = soup.find("span", {"class": "B_NuCI"})
+            title = title.text.strip() if title else "Title not found"
+
+            features = soup.find_all("li", class_="_21Ahn-")
+            features = [f.text.strip() for f in features] if features else ["Features not found"]
+
+            price = soup.find("div", {"class": "_30jeq3 _16Jk6d"})
+            price = price.text.replace("₹", "").replace(",", "").strip() if price else "Price not found"
+
+        else:
+            title, features, price = "Unsupported Store", [], "N/A"
+
+        return title, features, float(price) if price.isdigit() else "N/A"
+    except requests.exceptions.RequestException as e:
+        return "Error: Unable to fetch data", [], "N/A"
+    except Exception as e:
+        return "Error: Unexpected issue", [], "N/A"
+
 # Step 5: Fetch Data and Compare
 if st.button("Show Comparison"):
-    # Scrape Product Data
-    def scrape_product_data(url):
-        try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers, timeout=10)
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            # Extract product details
-            if "amazon" in url:
-                title = soup.find("span", {"id": "productTitle"}).text.strip()
-                features = [li.text.strip() for li in soup.find_all("span", class_="a-list-item")]
-                price = soup.find("span", {"class": "a-price-whole"})
-                price = price.text.replace(",", "").strip() if price else "Price not found"
-            elif "flipkart" in url:
-                title = soup.find("span", {"class": "B_NuCI"}).text.strip()
-                features = [li.text.strip() for li in soup.find_all("li", class_="_21Ahn-")]
-                price = soup.find("div", {"class": "_30jeq3 _16Jk6d"})
-                price = price.text.replace("₹", "").replace(",", "").strip() if price else "Price not found"
-            else:
-                title, features, price = "Unsupported Store", [], "N/A"
-
-            return title, features, float(price) if price.isdigit() else "N/A"
-        except Exception as e:
-            return "Error", [], "N/A"
-
     # Get Product URLs
     urls_1 = filtered_products[filtered_products["Product Name"] == product_1]["Product URL"].tolist()
     urls_2 = filtered_products[filtered_products["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape data for both products
-    results_1 = [scrape_product_data(url) for url in urls_1]
-    results_2 = [scrape_product_data(url) for url in urls_2]
+    results_1 = [scrape_product_data_with_scraperapi(url) for url in urls_1]
+    results_2 = [scrape_product_data_with_scraperapi(url) for url in urls_2]
 
     # Feature Comparison Table
     st.markdown("### Feature Comparison")
