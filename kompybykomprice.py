@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import asyncio
 import aiohttp
 import openai
+import time  # Added for delay between requests
 
 # API Configurations
 SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
@@ -21,19 +22,20 @@ product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
 city_list = pd.read_csv("city_List_test.csv")
 
-# Asynchronous Scraping
+# Asynchronous Scraping with Delay
 async def scrape_url(session, url):
-    """Scrape a single URL asynchronously using ScraperAPI."""
+    """Scrape a single URL asynchronously using ScraperAPI with a delay."""
     try:
         params = {"api_key": SCRAPER_API_KEY, "url": url}
         async with session.get(SCRAPER_API_URL, params=params, timeout=20) as response:
             html = await response.text()
+            await asyncio.sleep(2)  # Introduce a delay of 2 seconds between requests
             return BeautifulSoup(html, "html.parser")
-    except Exception:
+    except Exception as e:
         return None
 
 async def scrape_concurrently(urls):
-    """Scrape multiple URLs concurrently."""
+    """Scrape multiple URLs concurrently with a delay."""
     async with aiohttp.ClientSession() as session:
         tasks = [scrape_url(session, url) for url in urls]
         return await asyncio.gather(*tasks)
@@ -152,7 +154,7 @@ if st.button("🔍 Show Comparison"):
     st.markdown(sentiment_2)
 
     # Price Comparison Table
-    st.markdown("### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
+    st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
     price_comparison = []
 
     # Online Store Prices
