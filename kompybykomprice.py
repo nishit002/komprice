@@ -5,128 +5,144 @@ from bs4 import BeautifulSoup
 import openai
 import matplotlib.pyplot as plt
 
-# Load OpenAI API key from secrets
+# Set OpenAI API key securely
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
-# Embedded product URL table
-product_data = {
-    "Product Name": [
-        "Samsung M05", "iQOO Z9", "POCO M6", "iQOO Z9 Lite", "Samsung M15", "iQOO Z7 Pro",
-        "Samsung M05 (Flipkart)", "iQOO Z9s (Flipkart)", "POCO M6 (Flipkart)", "iQOO Z9 Lite (Flipkart)", "Samsung M15 (Flipkart)"
-    ],
-    "Store Name": [
-        "Amazon", "Amazon", "Amazon", "Amazon", "Amazon", "Amazon",
-        "Flipkart", "Flipkart", "Flipkart", "Flipkart", "Flipkart"
-    ],
-    "Product URL": [
-        "https://www.amazon.in/Samsung-Storage-Display-Charging-Security/dp/B0DFY3XCB6",
-        "https://www.amazon.in/iQOO-Storage-Ultra-Thin-Dimesity-Processor/dp/B07WHS35V6",
-        "https://www.amazon.in/POCO-Orion-Blue-4GB-64GB/dp/B0DC1GNY41",
-        "https://www.amazon.in/iQOO-Storage-Dimensity-Camera-Charger/dp/B07WFPLL2H",
-        "https://www.amazon.in/Samsung-Storage-MediaTek-Dimensity-Security/dp/B0DGX9VVFV",
-        "https://www.amazon.in/iQOO-Storage-Ultra-Thin-Dimesity-Processor/dp/B07WFPM2WQ",
-        "https://www.flipkart.com/samsung-m05-mint-green-64-gb/p/itm31b7d648fd40f",
-        "https://www.flipkart.com/iqoo-z9s-5g-onyx-green-256-gb/p/itme8048e0375248",
-        "https://www.flipkart.com/poco-m6-5g-orion-blue-128-gb/p/itm1227ec8698a77",
-        "https://www.flipkart.com/iqoo-z9-lite-5g-mocha-brown-128-gb/p/itm359f39910fd09",
-        "https://www.flipkart.com/samsung-galaxy-m15-5g-blue-topaz-128-gb/p/itmf5a4280beb534"
-    ]
-}
+# Raw URLs for the datasets
+PRODUCT_URL_FILE = "https://raw.githubusercontent.com/nishit002/komprice/fef95da449eecca9afd2805b35c5d6bbd4a8df7e/Product_URL_Test.csv"
+SUPPLIER_INFO_FILE = "https://raw.githubusercontent.com/nishit002/komprice/fef95da449eecca9afd2805b35c5d6bbd4a8df7e/Supplier_Info_prices.csv"
+CITY_LIST_FILE = "https://raw.githubusercontent.com/nishit002/komprice/fef95da449eecca9afd2805b35c5d6bbd4a8df7e/city_List_test.csv"
 
-df = pd.DataFrame(product_data)
+# Load datasets dynamically from GitHub
+@st.cache
+def load_data(url):
+    return pd.read_csv(url)
 
-# Streamlit app
-st.title("Detailed Product Comparison (Amazon & Flipkart)")
+product_data = load_data(PRODUCT_URL_FILE)  # Product URLs
+supplier_data = load_data(SUPPLIER_INFO_FILE)  # Supplier Info
+city_list = load_data(CITY_LIST_FILE)  # City List
 
-# Display table of product URLs
-st.markdown("### Embedded Product URLs:")
-st.dataframe(df)
+# Step 1: Select Category
+st.title("Product Comparison App")
+categories = product_data["Category"].unique().tolist()
+selected_category = st.selectbox("Select Product Category", categories)
 
-# Dropdown to select products
-product_list = df["Product Name"].tolist()
-product_a = st.selectbox("Select Product A", product_list)
-product_b = st.selectbox("Select Product B", product_list)
+# Step 2: Filter Products by Category
+filtered_products = product_data[product_data["Category"] == selected_category]
+products = filtered_products["Product Name"].unique().tolist()
 
-# Function to scrape product details and reviews
-def scrape_product_data(url):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
+# Step 3: Select Products to Compare
+product_1 = st.selectbox("Select Product 1", products)
+product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
-        # Extract product title
-        if "amazon" in url:
-            title = soup.find("span", {"id": "productTitle"})
-            title = title.text.strip() if title else "No Title Found"
+# Step 4: Select User's City
+cities = city_list["City"].unique().tolist()
+selected_city = st.selectbox("Select Your City", cities)
 
-            # Extract features
-            feature_bullets = soup.find_all("span", class_="a-list-item")
-            features = [bullet.text.strip() for bullet in feature_bullets if bullet.text.strip()]
+# Step 5: Fetch Data and Compare
+if st.button("Show Comparison"):
+    # Scrape Product Data
+    def scrape_product_data(url):
+        try:
+            headers = {"User-Agent": "Mozilla/5.0"}
+            response = requests.get(url, headers=headers, timeout=10)
+            soup = BeautifulSoup(response.text, "html.parser")
 
-            # Extract reviews
-            reviews = soup.find_all("span", class_="review-text-content")
-            reviews_text = [review.text.strip() for review in reviews]
+            # Extract product details
+            if "amazon" in url:
+                title = soup.find("span", {"id": "productTitle"}).text.strip()
+                features = [li.text.strip() for li in soup.find_all("span", class_="a-list-item")]
+                price = soup.find("span", {"class": "a-price-whole"})
+                price = price.text.replace(",", "").strip() if price else "Price not found"
+            elif "flipkart" in url:
+                title = soup.find("span", {"class": "B_NuCI"}).text.strip()
+                features = [li.text.strip() for li in soup.find_all("li", class_="_21Ahn-")]
+                price = soup.find("div", {"class": "_30jeq3 _16Jk6d"})
+                price = price.text.replace("₹", "").replace(",", "").strip() if price else "Price not found"
+            else:
+                title, features, price = "Unsupported Store", [], "N/A"
 
-        elif "flipkart" in url:
-            title = soup.find("span", {"class": "B_NuCI"})
-            title = title.text.strip() if title else "No Title Found"
+            return title, features, float(price) if price.isdigit() else "N/A"
+        except Exception as e:
+            return "Error", [], "N/A"
 
-            # Extract features
-            feature_bullets = soup.find_all("li", class_="_21Ahn-")
-            features = [bullet.text.strip() for bullet in feature_bullets if bullet.text.strip()]
+    # Get Product URLs
+    urls_1 = filtered_products[filtered_products["Product Name"] == product_1]["Product URL"].tolist()
+    urls_2 = filtered_products[filtered_products["Product Name"] == product_2]["Product URL"].tolist()
 
-            # Extract reviews
-            reviews = soup.find_all("div", class_="t-ZTKy")
-            reviews_text = [review.text.strip() for review in reviews]
+    # Scrape data for both products
+    results_1 = [scrape_product_data(url) for url in urls_1]
+    results_2 = [scrape_product_data(url) for url in urls_2]
 
-        else:
-            title, features, reviews_text = "Unsupported Store", [], []
+    # Feature Comparison Table
+    st.markdown("### Feature Comparison")
+    feature_data = {
+        "Category": ["Title", "Key Features", "Price"],
+        product_1: [results_1[0][0], ", ".join(results_1[0][1][:10]), results_1[0][2]],
+        product_2: [results_2[0][0], ", ".join(results_2[0][1][:10]), results_2[0][2]],
+    }
+    st.table(pd.DataFrame(feature_data))
 
-        return title, features, reviews_text
-    except Exception as e:
-        return "Error", [], []
-
-# Function to analyze features, likes, and dislikes using GPT
-def analyze_with_gpt(title, features, reviews):
-    try:
+    # Sentiment Analysis
+    def analyze_with_gpt(title, features):
         prompt = (
             f"The product title is: {title}.\n"
-            f"Here are the features:\n{features}\n"
-            f"Here are some customer reviews:\n{reviews}\n"
-            "Based on this, summarize the following in detail:\n"
-            "- Key product features\n"
-            "- What customers like most about the product\n"
-            "- What customers dislike about the product\n"
-            "Provide a detailed analysis that can be used for creating comparison tables and graphs."
+            f"Features: {features}.\n"
+            "Provide a detailed sentiment analysis, including likes and dislikes."
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are an expert e-commerce assistant."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=1000
+            messages=[{"role": "system", "content": "You are an expert analyst."}, {"role": "user", "content": prompt}],
+            max_tokens=500,
         )
         return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"Error analyzing with GPT: {str(e)}"
 
-# Compare the selected products
-if product_a and product_b and product_a != product_b:
-    url_a = df.loc[df["Product Name"] == product_a, "Product URL"].values[0]
-    url_b = df.loc[df["Product Name"] == product_b, "Product URL"].values[0]
+    st.markdown("### Sentiment Analysis")
+    st.write(f"**{product_1} Sentiment Analysis:**")
+    st.text(analyze_with_gpt(results_1[0][0], results_1[0][1]))
+    st.write(f"**{product_2} Sentiment Analysis:**")
+    st.text(analyze_with_gpt(results_2[0][0], results_2[0][1]))
 
-    # Scrape data for both products
-    title_a, features_a, reviews_a = scrape_product_data(url_a)
-    title_b, features_b, reviews_b = scrape_product_data(url_b)
+    # Price Comparison Table
+    st.markdown("### Price Comparison Across Stores")
+    price_comparison_data = []
+    for result, urls, product in [(results_1, urls_1, product_1), (results_2, urls_2, product_2)]:
+        for store_result, url in zip(result, urls):
+            price_comparison_data.append({
+                "Product": product,
+                "Store": "Amazon" if "amazon" in url else "Flipkart",
+                "Price": store_result[2],
+                "Buy Now": f"[Link]({url})"
+            })
+    price_comparison_df = pd.DataFrame(price_comparison_data)
+    st.table(price_comparison_df)
 
-    # Use GPT to analyze features, likes, and dislikes
-    analysis_a = analyze_with_gpt(title_a, features_a[:5], reviews_a[:10])
-    analysis_b = analyze_with_gpt(title_b, features_b[:5], reviews_b[:10])
+    # Local Supplier Data
+    st.markdown("### Local Supplier Information")
+    suppliers = supplier_data[(supplier_data["City"] == selected_city) & (supplier_data["Product Name"].isin([product_1, product_2]))]
+    if not suppliers.empty:
+        suppliers["Cheapest"] = suppliers["Price"] == suppliers["Price"].min()
+        st.table(suppliers)
 
-    # Display detailed report
-    st.subheader("Detailed Report")
-    st.markdown(f"### {product_a}")
-    st.text(analysis_a)
-    st.markdown(f"### {product_b}")
-    st.text(analysis_b)
+        # Add supplier prices to the graph
+        for _, row in suppliers.iterrows():
+            price_comparison_data.append({
+                "Product": row["Product Name"],
+                "Store": row["Supplier Name"],
+                "Price": row["Price"],
+                "Buy Now": f"Supplier Address: {row['Address']}"
+            })
+
+    # Plot Graph: Price Comparison
+    st.markdown("### Price Comparison Graph")
+    if price_comparison_data:
+        graph_df = pd.DataFrame(price_comparison_data)
+        graph_df = graph_df.groupby(["Product", "Store"]).mean().reset_index()
+        for product in graph_df["Product"].unique():
+            product_df = graph_df[graph_df["Product"] == product]
+            fig, ax = plt.subplots()
+            ax.bar(product_df["Store"], product_df["Price"])
+            ax.set_title(f"Price Comparison for {product}")
+            ax.set_ylabel("Price")
+            ax.set_xlabel("Store")
+            st.pyplot(fig)
