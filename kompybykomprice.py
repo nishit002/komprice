@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 import openai
 import matplotlib.pyplot as plt
 
-# Set your OpenAI API key
+# Load OpenAI API key from secrets
 openai.api_key = st.secrets["openai"]["openai_api_key"]
 
 # Embedded product URL table
@@ -130,14 +130,3 @@ if product_a and product_b and product_a != product_b:
     st.text(analysis_a)
     st.markdown(f"### {product_b}")
     st.text(analysis_b)
-
-    # Graph: Feature comparison
-    feature_counts = {
-        product_a: len(features_a),
-        product_b: len(features_b),
-    }
-    fig, ax = plt.subplots()
-    ax.bar(feature_counts.keys(), feature_counts.values())
-    ax.set_title("Number of Features Compared")
-    ax.set_ylabel("Count")
-    st.pyplot(fig)
