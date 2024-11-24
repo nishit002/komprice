@@ -26,7 +26,8 @@ USER_AGENTS = [
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Scraper Function
+
+# Scraper Function with Enhanced Error Handling
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -61,6 +62,7 @@ def scrape_page_with_scraperapi(url):
             title = "Title not found"
             price = "Price not found"
 
+        # Clean and format price
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
         price_cleaned = float(price_cleaned) if price_cleaned else None
 
@@ -69,12 +71,9 @@ def scrape_page_with_scraperapi(url):
 
         return {"title": title, "price": price_cleaned, "source": source, "reviews": reviews}
 
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Request error: {e}")
-        raise e
     except Exception as e:
-        logging.error(f"Scraper error: {e}")
-        raise e
+        logging.error(f"Error scraping {url}: {e}")
+        return {"title": "Title not found", "price": None, "source": "Error", "reviews": [], "error": str(e)}
 
 
 # Sentiment Analysis Function
@@ -97,12 +96,13 @@ def analyze_reviews_with_gpt(reviews):
 
 
 # Streamlit App
-st.title("🛒 Product Comparison with Sentiment Analysis and INR Prices")
+st.title("🛒 Product Comparison with Sentiment Analysis and Pricing")
 
 # Load Data
 @st.cache_data
 def load_data(file_path):
     return pd.read_csv(file_path)
+
 
 product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
@@ -122,6 +122,7 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     st.write("🚀 Scraping Product Data...")
+    errors = []  # To collect error logs
     with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
@@ -137,6 +138,8 @@ if st.button("🔍 Compare Products"):
                     "Price": item["price"],
                     "Link": f"[Buy Now](#)"
                 })
+            if item.get("error"):
+                errors.append(f"{item['source']}: {item['error']}")
 
     reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
     reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
@@ -183,3 +186,9 @@ if st.button("🔍 Compare Products"):
         st.pyplot(fig)
     else:
         st.write("No valid price data available for plotting.")
+
+    # Display Errors (if any)
+    if errors:
+        st.markdown("### 🚨 Error Log")
+        for error in errors:
+            st.error(error)
