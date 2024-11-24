@@ -121,6 +121,12 @@ else:
     product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
     if st.button("🔍 Compare Products"):
+        # Filter supplier data for the selected city and product
+        supplier_filtered = supplier_data[
+            (supplier_data["Product Name"].isin([product_1, product_2])) &
+            (supplier_data["City"] == selected_city)
+        ]
+
         urls_1 = product_data[product_data["Product Name"] == product_1]
         urls_2 = product_data[product_data["Product Name"] == product_2]
 
@@ -144,8 +150,8 @@ else:
             if data.get("error"):
                 errors.append(f"{url}: {data['error']}")
 
-        # Add supplier info with links from 'Address' column
-        for _, row in supplier_data.iterrows():
+        # Add filtered supplier info with links from 'Address' column
+        for _, row in supplier_filtered.iterrows():
             price_comparison.append({
                 "Product": row["Product Name"],
                 "Source": row["Supplier Name"],
