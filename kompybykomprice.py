@@ -114,24 +114,24 @@ product_1 = st.selectbox("Select Product 1", products)
 product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
 if st.button("🔍 Compare Products"):
-    urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].tolist()
-    urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
+    urls_1 = product_data[product_data["Product Name"] == product_1][["Product URL", "Product Name"]]
+    urls_2 = product_data[product_data["Product Name"] == product_2][["Product URL", "Product Name"]]
 
     st.write("🚀 Scraping Product Data...")
     errors = []
     with ThreadPoolExecutor() as executor:
-        scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
-        scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
+        scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1["Product URL"].tolist()))
+        scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2["Product URL"].tolist()))
 
     price_comparison = []
     sentiment_summaries = {}
-    for url, data in zip(urls_1 + urls_2, scraped_data_1 + scraped_data_2):
+    for url, data in zip(urls_1["Product URL"].tolist() + urls_2["Product URL"].tolist(), scraped_data_1 + scraped_data_2):
         if data["price"] is not None:
             price_comparison.append({
                 "Product": data["title"],
                 "Source": data["source"],
                 "Price": data["price"],
-                "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
+                "Link": f'<a href="{url}" target="_blank">{url}</a>'
             })
         sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
         if data.get("error"):
