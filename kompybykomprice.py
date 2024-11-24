@@ -155,14 +155,27 @@ if st.button("🔍 Compare Products"):
     st.write(price_df)
 
     # Plot Price Comparison Graph
-    st.markdown("### 📊 Price Comparison Graph")
-    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-    if price_df["Price"].notna().sum() > 0:
-        fig, ax = plt.subplots()
-        price_df.groupby("Source")["Price"].mean().plot(kind="bar", ax=ax)
-        ax.set_title("Price Comparison by Source")
-        ax.set_ylabel("Average Price")
-        ax.set_xlabel("Source")
-        st.pyplot(fig)
-    else:
-        st.write("No valid price data available for plotting.")
+   # Plot Price Comparison Graph
+st.markdown("### 📊 Price Comparison Graph")
+
+# Convert Price column to numeric, handling invalid entries
+price_df = pd.DataFrame(price_comparison)
+price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+
+# Drop rows where Price is NaN
+price_df = price_df.dropna(subset=["Price"])
+
+if not price_df.empty:
+    # Group data by Source and calculate average prices
+    avg_prices = price_df.groupby("Source")["Price"].mean()
+
+    # Plot the data
+    fig, ax = plt.subplots()
+    avg_prices.plot(kind="bar", ax=ax)
+    ax.set_title("Price Comparison by Source")
+    ax.set_ylabel("Average Price")
+    ax.set_xlabel("Source")
+    st.pyplot(fig)
+else:
+    st.write("No valid price data available for plotting.")
+
