@@ -2,15 +2,16 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 import random
+import streamlit as st
 import matplotlib.pyplot as plt
 import openai
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 # OpenAI API Key
-openai.api_key = "YOUR_API_KEY"
+openai.api_key = st.secrets["openai"]["openai_api_key"]
 
 # ScraperAPI Key
-SCRAPER_API_KEY = "YOUR_SCRAPER_API_KEY"
+SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
 
 # User-Agent List
 USER_AGENTS = [
@@ -22,7 +23,7 @@ USER_AGENTS = [
 # Scraper Function
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
-    """Scrape a webpage using ScraperAPI."""
+    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -46,12 +47,19 @@ def scrape_page_with_scraperapi(url):
             or soup.find("span", {"class": "a-price-whole"})
         )
         price = price.text.strip() if price else "Price not found"
-        price_cleaned = ''.join([c for c in price if c.isdigit() or c == '.'])
+
+        # Clean the price to remove special characters (e.g., `$`, `,`)
+        price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
+        price_cleaned = price_cleaned if price_cleaned else None  # Handle cases where price is missing
 
         return {"title": title, "reviews": reviews, "price": price_cleaned}
 
     except requests.exceptions.RequestException as e:
-        raise Exception(f"Error scraping {url}: {e}")
+        st.error(f"Error scraping {url}: {e}")
+        raise e
+    except Exception as e:
+        st.error(f"Unexpected error during scraping: {e}")
+        raise e
 
 # Sentiment Analysis Function
 def analyze_reviews_with_gpt(reviews):
@@ -71,74 +79,103 @@ def analyze_reviews_with_gpt(reviews):
     except Exception as e:
         return f"Error generating sentiment analysis: {e}"
 
-# Test Phase 1
-product_urls = [
-    "https://www.amazon.in/example-product-1",
-    "https://www.amazon.in/example-product-2"
-]
+# Streamlit App
+st.title("🛒 Product Comparison with Sentiment Analysis and City-Specific Prices")
 
-# Scrape and Analyze
-scraped_results = [scrape_page_with_scraperapi(url) for url in product_urls]
-for result in scraped_results:
-    print(f"Title: {result['title']}")
-    print(f"Price: {result['price']}")
-    print(f"Reviews: {', '.join(result['reviews'][:3])}...")
-    print(f"Sentiment Analysis: {analyze_reviews_with_gpt(result['reviews'])}")
+# Load Data
+@st.cache_data
+def load_data(file_path):
+    return pd.read_csv(file_path)
 
-print("\nPhase 1 completed. Ready to proceed to Phase 2.\n")
-# Example Supplier Data (Replace with actual CSV file)
-supplier_data = pd.DataFrame({
-    "Product Name": ["Example Product 1", "Example Product 2"],
-    "Supplier Name": ["Local Supplier 1", "Local Supplier 2"],
-    "City": ["City A", "City B"],
-    "Price": ["2000", "2200"],
-    "Address": ["https://goo.gl/maps/example1", "https://goo.gl/maps/example2"]
-})
+product_data = load_data("Product_URL_Test.csv")
+supplier_data = load_data("Supplier_Info_prices.csv")
+city_list = load_data("city_List_test.csv")
 
-# City Selection
-selected_city = "City A"
+# Select City
+cities = city_list["City"].unique().tolist()
+selected_city = st.selectbox("Select Your City", cities)
 
-# Combine Scraped Data and Supplier Data
-price_comparison = []
+# Select Products for Comparison
+products = product_data["Product Name"].unique().tolist()
+product_1 = st.selectbox("Select Product 1", products)
+product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
-# Online Store Prices
-for result in scraped_results:
-    price_comparison.append({
-        "Product": result["title"],
-        "Source": "Online Store",
-        "Price": result["price"],
-        "Link": "https://example-store-link"
-    })
+if st.button("🔍 Compare Products"):
+    urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].tolist()
+    urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
-# Local Supplier Prices
-local_suppliers = supplier_data[supplier_data["City"] == selected_city]
-for _, row in local_suppliers.iterrows():
-    price_comparison.append({
-        "Product": row["Product Name"],
-        "Source": row["Supplier Name"],
-        "Price": row["Price"],
-        "Link": f"[Direction]({row['Address']})"
-    })
+    # Scrape Product Data
+    st.write("🚀 Scraping Product Data Good Things Takes Time Wait for Amazing Deals...")
+    scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
+    scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
-# Convert to DataFrame
-price_df = pd.DataFrame(price_comparison)
-print("Price Comparison Table:")
-print(price_df)
+    # Display Titles and Prices
+    title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
+    title_2 = scraped_data_2[0]["title"] if scraped_data_2 else "No title found"
 
-# Clean Price Column
-price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-price_df = price_df.dropna(subset=["Price"])
+    price_1 = scraped_data_1[0]["price"] if scraped_data_1 else "Price not found"
+    price_2 = scraped_data_2[0]["price"] if scraped_data_2 else "Price not found"
 
-# Plot Graph
-if not price_df.empty:
-    avg_prices = price_df.groupby("Source")["Price"].mean()
-    fig, ax = plt.subplots()
-    avg_prices.plot(kind="bar", ax=ax)
-    ax.set_title("Price Comparison by Source")
-    ax.set_ylabel("Average Price")
-    ax.set_xlabel("Source")
-    plt.show()
-else:
-    print("No valid price data available for plotting.")
+    st.markdown(f"### Product 1: {title_1} - ${price_1}")
+    st.markdown(f"### Product 2: {title_2} - ${price_2}")
 
-print("\nPhase 2 completed.")
+    # Analyze Reviews
+    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
+    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
+
+    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
+    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
+
+    # Display Sentiments
+    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
+    st.markdown(f"**{title_1}**:\n{sentiment_1}")
+    st.markdown(f"**{title_2}**:\n{sentiment_2}")
+
+    # Price Comparison Table
+    st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
+    price_comparison = []
+
+    # Online Store Prices
+    for product, data, urls in zip([product_1, product_2], [scraped_data_1, scraped_data_2], [urls_1, urls_2]):
+        for source, url in zip(["Amazon", "Flipkart"], urls):
+            price_cleaned = data[0]["price"] if data and data[0]["price"] else None
+            price_comparison.append({
+                "Product": product,
+                "Source": source,
+                "Price": price_cleaned,
+                "Store Link": f"[Buy Now]({url})"
+            })
+
+    # Local Supplier Prices
+    supplier_info = supplier_data[
+        (supplier_data["Product Name"].isin([product_1, product_2])) &
+        (supplier_data["City"] == selected_city)
+    ].drop_duplicates(subset=["Product Name", "Supplier Name"])
+    for _, row in supplier_info.iterrows():
+        price_comparison.append({
+            "Product": row["Product Name"],
+            "Source": row["Supplier Name"],
+            "Price": f"{float(row['Price']):,.2f}",
+            "Store Link": f"[Direction]({row['Address']})"
+        })
+
+    # Display Price Comparison Table
+    price_df = pd.DataFrame(price_comparison)
+    st.write("### Price Comparison Table")
+    st.write(price_df)
+
+    # Plot Price Comparison Graph
+    st.markdown("### 📊 Price Comparison Graph")
+    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+    price_df = price_df.dropna(subset=["Price"])  # Drop rows with invalid or missing prices
+
+    if not price_df.empty:
+        avg_prices = price_df.groupby("Source")["Price"].mean()
+        fig, ax = plt.subplots()
+        avg_prices.plot(kind="bar", ax=ax)
+        ax.set_title("Price Comparison by Source")
+        ax.set_ylabel("Average Price")
+        ax.set_xlabel("Source")
+        st.pyplot(fig)
+    else:
+        st.write("No valid price data available for plotting.")
