@@ -41,39 +41,20 @@ def scrape_page_with_scraperapi(url):
         # Detect source based on URL
         source = "Amazon" if "amazon" in url.lower() else "Flipkart" if "flipkart" in url.lower() else "Other"
 
-        # Extract Product Title (based on source)
-        if source == "Amazon":
-            title = soup.find("span", {"id": "productTitle"})
-        elif source == "Flipkart":
-            title = soup.find("span", {"class": "B_NuCI"})
-        else:
-            title = None  # For other sources
-
+        # Extract Product Title
+        title = soup.find("span", {"id": "productTitle"}) or soup.find("h1", {"class": "yhB1nd"})
         title = title.text.strip() if title else "Title not found"
 
         # Extract Customer Reviews
-        reviews = []
-        if source == "Amazon":
-            reviews = soup.find_all("span", {"data-hook": "review-body"})
-            reviews = [review.text.strip() for review in reviews if review]
-        elif source == "Flipkart":
-            reviews_section = soup.find_all("div", {"class": "_6K-7Co"})
-            reviews = [review.text.strip() for review in reviews_section]
-
-        reviews = reviews or ["No reviews found"]
+        reviews = soup.find_all("span", {"data-hook": "review-body"}) or soup.find_all("div", {"class": "t-ZTKy"})
+        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
         # Extract and Clean Price for INR
-        if source == "Amazon":
-            price = (
-                soup.find("span", {"id": "priceblock_ourprice"})
-                or soup.find("span", {"id": "priceblock_dealprice"})
-                or soup.find("span", {"class": "a-price-whole"})
-            )
-        elif source == "Flipkart":
-            price = soup.find("div", {"class": "_30jeq3 _16Jk6d"})
-        else:
-            price = None
-
+        price = (
+            soup.find("span", {"id": "priceblock_ourprice"})
+            or soup.find("span", {"id": "priceblock_dealprice"})
+            or soup.find("div", {"class": "_30jeq3"})
+        )
         price = price.text.strip() if price else "Price not found"
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
 
@@ -83,10 +64,10 @@ def scrape_page_with_scraperapi(url):
         return {"title": title, "reviews": reviews, "price": price_cleaned, "source": source}
 
     except requests.exceptions.RequestException as e:
-        st.error(f"Error scraping {url}: {e}")
+        logging.error(f"Request error: {e}")
         raise e
     except Exception as e:
-        st.error(f"Unexpected error during scraping: {e}")
+        logging.error(f"Scraper error: {e}")
         raise e
 
 # Sentiment Analysis Function
@@ -170,7 +151,7 @@ if st.button("🔍 Compare Products"):
             price_comparison.append({
                 "Product": item["title"],
                 "Source": item["source"],
-                "Price": float(item["price"]) if item["price"] else None,
+                "Price": float(item["price"]) if item["price"].replace('.', '', 1).isdigit() else None,
                 "Link": f"[Buy Now](#)"
             })
 
