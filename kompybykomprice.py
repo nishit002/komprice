@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import openai
 from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
+import urllib.parse
 
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
@@ -151,11 +152,13 @@ if st.button("🔍 Compare Products"):
         (supplier_data["City"] == selected_city)
     ].drop_duplicates(subset=["Product Name", "Supplier Name"])
     for _, row in supplier_info.iterrows():
+        address_encoded = urllib.parse.quote(row['Address'])
+        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={address_encoded}"
         price_comparison.append({
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": float(row["Price"]),
-            "Link": f"[Get Direction](https://www.google.com/maps/search/?api=1&query={row['Address']})"
+            "Link": f"[Get Direction]({google_maps_url})"
         })
 
     # Add Cheapest Source Tag
@@ -163,9 +166,14 @@ if st.button("🔍 Compare Products"):
     min_price = price_df["Price"].min()
     price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
+    # Render Hyperlinks in the Table
+    price_df["Link"] = price_df["Link"].apply(
+        lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">{x.split("[")[1].split("]")[0]}</a>'
+    )
+
     # Display Price Comparison Table
-    st.write("### Price Comparison Table")
-    st.write(price_df)
+    st.markdown("### Price Comparison Table")
+    st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
     # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
