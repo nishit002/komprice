@@ -24,6 +24,7 @@ USER_AGENTS = [
 # ScraperAPI Wrapper Function with Improved Price Extraction
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
+    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -56,6 +57,7 @@ def scrape_page_with_scraperapi(url):
 
 # Sentiment Analysis Using OpenAI
 def analyze_reviews_with_gpt(reviews):
+    """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points for: "
@@ -97,7 +99,7 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape Product Data
-    st.write("🚀 Scraping Product Data Good Things Takes Time Wait for Amazing Deals...")
+    st.write("🚀 Scraping Product Data, Please Wait...")
     scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
     scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
@@ -155,27 +157,20 @@ if st.button("🔍 Compare Products"):
     st.write(price_df)
 
     # Plot Price Comparison Graph
-   # Plot Price Comparison Graph
-st.markdown("### 📊 Price Comparison Graph")
+    st.markdown("### 📊 Price Comparison Graph")
+    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+    price_df = price_df.dropna(subset=["Price"])  # Remove rows with NaN prices
 
-# Convert Price column to numeric, handling invalid entries
-price_df = pd.DataFrame(price_comparison)
-price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
+    if not price_df.empty:
+        # Group data by Source and calculate average prices
+        avg_prices = price_df.groupby("Source")["Price"].mean()
 
-# Drop rows where Price is NaN
-price_df = price_df.dropna(subset=["Price"])
-
-if not price_df.empty:
-    # Group data by Source and calculate average prices
-    avg_prices = price_df.groupby("Source")["Price"].mean()
-
-    # Plot the data
-    fig, ax = plt.subplots()
-    avg_prices.plot(kind="bar", ax=ax)
-    ax.set_title("Price Comparison by Source")
-    ax.set_ylabel("Average Price")
-    ax.set_xlabel("Source")
-    st.pyplot(fig)
-else:
-    st.write("No valid price data available for plotting.")
-
+        # Plot the data
+        fig, ax = plt.subplots()
+        avg_prices.plot(kind="bar", ax=ax)
+        ax.set_title("Price Comparison by Source")
+        ax.set_ylabel("Average Price")
+        ax.set_xlabel("Source")
+        st.pyplot(fig)
+    else:
+        st.write("No valid price data available for plotting.")
