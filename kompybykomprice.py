@@ -142,8 +142,9 @@ if st.button("🔍 Compare Products"):
         (supplier_data["City"] == selected_city)
     ].drop_duplicates()
     for _, row in supplier_info.iterrows():
+        # Correct Google Maps Link Generation
         address_encoded = urllib.parse.quote(row['Address'])
-        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={address_encoded}"
+        google_maps_url = f"https://www.google.com/maps?q={address_encoded}"
         price_comparison.append({
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
