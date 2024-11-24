@@ -99,7 +99,7 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape Product Data
-    st.write("🚀 Fetching Product Data Good Things Take Time Wait for Amazing Deals...")
+    st.write("🚀 Scraping Product Data Good Things Takes Time Wait for Amazing Deals...")
     scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
     scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
@@ -112,6 +112,26 @@ if st.button("🔍 Compare Products"):
 
     st.markdown(f"### Product 1: {title_1} - {price_1}")
     st.markdown(f"### Product 2: {title_2} - {price_2}")
+
+    # Analyze Reviews
+    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
+    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
+
+    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
+    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
+
+    # Separate Likes and Dislikes
+    likes_1, dislikes_1 = sentiment_1.split("Negative Sentiments:")[0], sentiment_1.split("Negative Sentiments:")[1]
+    likes_2, dislikes_2 = sentiment_2.split("Negative Sentiments:")[0], sentiment_2.split("Negative Sentiments:")[1]
+
+    # Display Sentiments
+    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
+    st.markdown(f"**{title_1}**:\n{likes_1}")
+    st.markdown(f"**{title_2}**:\n{likes_2}")
+
+    st.markdown("### 😞 Customer Reviews: Negative Sentiments")
+    st.markdown(f"**{title_1}**:\n{dislikes_1}")
+    st.markdown(f"**{title_2}**:\n{dislikes_2}")
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
