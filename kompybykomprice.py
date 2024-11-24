@@ -105,64 +105,71 @@ product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
 city_list = load_data("city_List_test.csv")
 
-cities = city_list["City"].unique().tolist()
-selected_city = st.selectbox("Select Your City", cities)
+# Clean column names to remove extra spaces
+product_data.columns = product_data.columns.str.strip()
 
-products = product_data["Product Name"].unique().tolist()
-product_1 = st.selectbox("Select Product 1", products)
-product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
+# Ensure 'Product URL' column exists
+if "Product URL" not in product_data.columns:
+    st.error("The 'Product URL' column is missing in Product_URL_Test.csv. Please check the file.")
+else:
+    cities = city_list["City"].unique().tolist()
+    selected_city = st.selectbox("Select Your City", cities)
 
-if st.button("🔍 Compare Products"):
-    urls_1 = product_data[product_data["Product Name"] == product_1]
-    urls_2 = product_data[product_data["Product Name"] == product_2]
+    products = product_data["Product Name"].unique().tolist()
+    product_1 = st.selectbox("Select Product 1", products)
+    product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
-    st.write("🚀 Scraping Product Data...")
-    errors = []
-    with ThreadPoolExecutor() as executor:
-        scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1["Product URL"].tolist()))
-        scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2["Product URL"].tolist()))
+    if st.button("🔍 Compare Products"):
+        urls_1 = product_data[product_data["Product Name"] == product_1]
+        urls_2 = product_data[product_data["Product Name"] == product_2]
 
-    price_comparison = []
-    sentiment_summaries = {}
-    for url, data in zip(urls_1["Product URL"].tolist() + urls_2["Product URL"].tolist(), scraped_data_1 + scraped_data_2):
-        if data["price"] is not None:
+        st.write("🚀 Scraping Product Data...")
+        errors = []
+        with ThreadPoolExecutor() as executor:
+            scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1["Product URL"].tolist()))
+            scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2["Product URL"].tolist()))
+
+        price_comparison = []
+        sentiment_summaries = {}
+        for url, data in zip(urls_1["Product URL"].tolist() + urls_2["Product URL"].tolist(), scraped_data_1 + scraped_data_2):
+            if data["price"] is not None:
+                price_comparison.append({
+                    "Product": data["title"],
+                    "Source": data["source"],
+                    "Price": data["price"],
+                    "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
+                })
+            sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
+            if data.get("error"):
+                errors.append(f"{url}: {data['error']}")
+
+        # Add supplier info with links
+        supplier_info = supplier_data[
+            (supplier_data["Product Name"].isin([product_1, product_2])) &
+            (supplier_data["City"] == selected_city)
+        ].drop_duplicates()
+        for _, row in supplier_info.iterrows():
             price_comparison.append({
-                "Product": data["title"],
-                "Source": data["source"],
-                "Price": data["price"],
-                "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
+                "Product": row["Product Name"],
+                "Source": row["Supplier Name"],
+                "Price": float(row["Price"]),
+                "Link": f'<a href="{row["Product URL"]}" target="_blank">Get Direction</a>'
             })
-        sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
-        if data.get("error"):
-            errors.append(f"{url}: {data['error']}")
 
-    # Use Product URL for Google Maps Links
-    supplier_info = supplier_data[
-        (supplier_data["Product Name"].isin([product_1, product_2])) &
-        (supplier_data["City"] == selected_city)
-    ].drop_duplicates()
-    for _, row in supplier_info.iterrows():
-        price_comparison.append({
-            "Product": row["Product Name"],
-            "Source": row["Supplier Name"],
-            "Price": float(row["Price"]),
-            "Link": f'<a href="{row["Product URL"]}" target="_blank">Get Direction</a>'
-        })
+        price_df = pd.DataFrame(price_comparison)
+        min_price = price_df["Price"].min()
+        price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
-    price_df = pd.DataFrame(price_comparison)
-    min_price = price_df["Price"].min()
-    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
+        # Display Price Comparison Table
+        st.markdown("### Price Comparison Table")
+        st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Display Price Comparison Table
-    st.markdown("### Price Comparison Table")
-    st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+        # Display Sentiment Analysis
+        st.markdown("### Sentiment Analysis of Reviews")
+        for product, sentiment in sentiment_summaries.items():
+            st.markdown(f"**{product}:**\n{sentiment}")
 
-    # Display Sentiment Analysis
-    st.markdown("### Sentiment Analysis of Reviews")
-    for product, sentiment in sentiment_summaries.items():
-        st.markdown(f"**{product}:**\n{sentiment}")
-
-    if errors:
-        st.markdown("### 🚨 Error Log")
-        for error in errors:
-            st.error(error)
+        if errors:
+            st.markdown("### 🚨 Error Log")
+            for error in errors:
+                st.error(error)
