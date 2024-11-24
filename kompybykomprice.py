@@ -6,6 +6,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import openai
 from tenacity import retry, stop_after_attempt, wait_fixed
+from concurrent.futures import ThreadPoolExecutor
 
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
@@ -101,10 +102,11 @@ if st.button("🔍 Compare Products"):
     urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].tolist()
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
-    # Scrape Product Data
+    # Concurrent Scraping of Product Data
     st.write("🚀 Scraping Product Data...")
-    scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
-    scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
+    with ThreadPoolExecutor() as executor:
+        scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
+        scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
     # Display Titles and Prices
     title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
@@ -139,8 +141,8 @@ if st.button("🔍 Compare Products"):
             price_comparison.append({
                 "Product": product,
                 "Source": source,
-                "Price": price_cleaned,
-                "Store Link": f"[Buy Now]({url})"
+                "Price": float(price_cleaned) if price_cleaned else None,
+                "Link": f"[Buy Now]({url})"
             })
 
     # Local Supplier Prices
@@ -152,20 +154,21 @@ if st.button("🔍 Compare Products"):
         price_comparison.append({
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
-            "Price": f"{float(row['Price']):,.2f}",
-            "Store Link": f"[Direction]({row['Address']})"
+            "Price": float(row["Price"]),
+            "Link": f"[Get Direction](https://www.google.com/maps/search/?api=1&query={row['Address']})"
         })
 
-    # Display Price Comparison Table
+    # Add Cheapest Source Tag
     price_df = pd.DataFrame(price_comparison)
+    min_price = price_df["Price"].min()
+    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
+
+    # Display Price Comparison Table
     st.write("### Price Comparison Table")
     st.write(price_df)
 
     # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
-    price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-    price_df = price_df.dropna(subset=["Price"])  # Drop rows with invalid or missing prices
-
     if not price_df.empty:
         avg_prices = price_df.groupby("Source")["Price"].mean()
         fig, ax = plt.subplots()
