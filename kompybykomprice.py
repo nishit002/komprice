@@ -164,35 +164,18 @@ if st.button("🔍 Compare Products"):
     for product, sentiment in sentiment_summaries.items():
         st.markdown(f"**{product}:**\n{sentiment}")
 
-    # Plot Average Price by Source
-    st.markdown("### 📊 Average Price by Source")
-    if not price_df.empty:
-        avg_prices = price_df.groupby("Source")["Price"].mean()
-        fig, ax = plt.subplots()
-        avg_prices.plot(kind="bar", ax=ax)
-        ax.set_title("Average Price by Source")
-        ax.set_ylabel("Price (₹)")
-        ax.set_xlabel("Source")
-        st.pyplot(fig)
+    # Plot Separate Graphs for Product 1 and Product 2
+    st.markdown("### 📊 Product Price Comparison Across Sources")
 
-    # Plot Individual Product Prices Across Stores
-    st.markdown("### 📊 Product Price Comparison Across Stores")
-    if not price_df.empty:
-        fig, ax = plt.subplots()
-        for product in price_df["Product"].unique():
-            product_data = price_df[price_df["Product"] == product]
-            ax.plot(
-                product_data["Source"],
-                product_data["Price"],
-                marker="o",
-                label=product
-            )
-        ax.set_title("Product Price Comparison Across Stores")
-        ax.set_ylabel("Price (₹)")
-        ax.set_xlabel("Store / Source")
-        ax.legend(title="Product")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+    for product in [product_1, product_2]:
+        product_data = price_df[price_df["Product"] == product]
+        if not product_data.empty:
+            fig, ax = plt.subplots()
+            ax.bar(product_data["Source"], product_data["Price"], color='blue', alpha=0.7)
+            ax.set_title(f"{product} Price Comparison Across Sources")
+            ax.set_ylabel("Price (₹)")
+            ax.set_xlabel("Source")
+            st.pyplot(fig)
 
     if errors:
         st.markdown("### 🚨 Error Log")
