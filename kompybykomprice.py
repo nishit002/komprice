@@ -26,7 +26,6 @@ USER_AGENTS = [
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -165,15 +164,34 @@ if st.button("🔍 Compare Products"):
     for product, sentiment in sentiment_summaries.items():
         st.markdown(f"**{product}:**\n{sentiment}")
 
-    # Plot Price Comparison Graph
-    st.markdown("### 📊 Price Comparison Graph")
+    # Plot Average Price by Source
+    st.markdown("### 📊 Average Price by Source")
     if not price_df.empty:
         avg_prices = price_df.groupby("Source")["Price"].mean()
         fig, ax = plt.subplots()
         avg_prices.plot(kind="bar", ax=ax)
-        ax.set_title("Price Comparison by Source")
-        ax.set_ylabel("Average Price (₹)")
+        ax.set_title("Average Price by Source")
+        ax.set_ylabel("Price (₹)")
         ax.set_xlabel("Source")
+        st.pyplot(fig)
+
+    # Plot Individual Product Prices Across Stores
+    st.markdown("### 📊 Product Price Comparison Across Stores")
+    if not price_df.empty:
+        fig, ax = plt.subplots()
+        for product in price_df["Product"].unique():
+            product_data = price_df[price_df["Product"] == product]
+            ax.plot(
+                product_data["Source"],
+                product_data["Price"],
+                marker="o",
+                label=product
+            )
+        ax.set_title("Product Price Comparison Across Stores")
+        ax.set_ylabel("Price (₹)")
+        ax.set_xlabel("Store / Source")
+        ax.legend(title="Product")
+        plt.xticks(rotation=45)
         st.pyplot(fig)
 
     if errors:
