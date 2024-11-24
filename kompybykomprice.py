@@ -125,6 +125,7 @@ if st.button("🔍 Compare Products"):
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
     price_comparison = []
+    sentiment_summaries = {}
     for url, data in zip(urls_1 + urls_2, scraped_data_1 + scraped_data_2):
         if data["price"] is not None:
             price_comparison.append({
@@ -133,6 +134,7 @@ if st.button("🔍 Compare Products"):
                 "Price": data["price"],
                 "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
             })
+        sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
         if data.get("error"):
             errors.append(f"{url}: {data['error']}")
 
@@ -154,9 +156,16 @@ if st.button("🔍 Compare Products"):
     min_price = price_df["Price"].min()
     price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
+    # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
     st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
+    # Display Sentiment Analysis
+    st.markdown("### Sentiment Analysis of Reviews")
+    for product, sentiment in sentiment_summaries.items():
+        st.markdown(f"**{product}:**\n{sentiment}")
+
+    # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
     if not price_df.empty:
         avg_prices = price_df.groupby("Source")["Price"].mean()
