@@ -131,7 +131,7 @@ if st.button("🔍 Compare Products"):
                 "Product": data["title"],
                 "Source": data["source"],
                 "Price": data["price"],
-                "Link": f'<a href="{url}" target="_blank">{url}</a>'
+                "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
             })
         sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
         if data.get("error"):
