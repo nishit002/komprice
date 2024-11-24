@@ -6,7 +6,6 @@ import streamlit as st
 import openai
 from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
-import urllib.parse
 import logging
 
 # OpenAI API Key
@@ -137,19 +136,17 @@ if st.button("🔍 Compare Products"):
         if data.get("error"):
             errors.append(f"{url}: {data['error']}")
 
+    # Use Google Maps Links Directly from the CSV
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
         (supplier_data["City"] == selected_city)
     ].drop_duplicates()
     for _, row in supplier_info.iterrows():
-        # Generate Google Maps Directions Link
-        address_encoded = urllib.parse.quote(row['Address'])
-        google_maps_url = f"https://www.google.com/maps/dir/?api=1&destination={address_encoded}"
         price_comparison.append({
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": float(row["Price"]),
-            "Link": f'<a href="{google_maps_url}" target="_blank">Get Direction</a>'
+            "Link": f'<a href="{row["Google Maps Link"]}" target="_blank">Get Direction</a>'
         })
 
     price_df = pd.DataFrame(price_comparison)
