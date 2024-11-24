@@ -3,8 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 import random
 import streamlit as st
-import matplotlib.pyplot as plt
 import openai
+import plotly.express as px
 from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
@@ -25,6 +25,7 @@ USER_AGENTS = [
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
@@ -164,18 +165,23 @@ if st.button("🔍 Compare Products"):
     for product, sentiment in sentiment_summaries.items():
         st.markdown(f"**{product}:**\n{sentiment}")
 
-    # Plot Separate Graphs for Product 1 and Product 2
+    # Plot Separate Graphs for Product 1 and Product 2 Using Plotly
     st.markdown("### 📊 Product Price Comparison Across Sources")
 
     for product in [product_1, product_2]:
         product_data = price_df[price_df["Product"] == product]
         if not product_data.empty:
-            fig, ax = plt.subplots()
-            ax.bar(product_data["Source"], product_data["Price"], color='blue', alpha=0.7)
-            ax.set_title(f"{product} Price Comparison Across Sources")
-            ax.set_ylabel("Price (₹)")
-            ax.set_xlabel("Source")
-            st.pyplot(fig)
+            fig = px.bar(
+                product_data,
+                x="Source",
+                y="Price",
+                color="Source",
+                title=f"{product} Price Comparison Across Sources",
+                labels={"Price": "Price (₹)", "Source": "Source / Store"},
+                text="Price"
+            )
+            fig.update_layout(showlegend=False)
+            st.plotly_chart(fig)
 
     if errors:
         st.markdown("### 🚨 Error Log")
