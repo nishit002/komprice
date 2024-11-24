@@ -27,7 +27,6 @@ USER_AGENTS = [
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-# Scraper Function
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -69,16 +68,17 @@ def scrape_page_with_scraperapi(url):
         reviews = soup.find_all("span", {"data-hook": "review-body"}) or soup.find_all("div", {"class": "t-ZTKy"})
         reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        return {"title": title, "price": price_cleaned, "source": source, "reviews": reviews}
+        return {"title": title, "price": price_cleaned, "source": source, "reviews": reviews, "url": url}
 
     except Exception as e:
         logging.error(f"Error scraping {url}: {e}")
-        return {"title": "Title not found", "price": None, "source": "Error", "reviews": [], "error": str(e)}
+        return {"title": "Title not found", "price": None, "source": "Error", "reviews": [], "url": url, "error": str(e)}
 
 
-# Sentiment Analysis Function
 def analyze_reviews_with_gpt(reviews):
     """Analyze reviews using GPT."""
+    if not reviews or reviews == ["No reviews found"]:
+        return "No reviews available for sentiment analysis."
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points for: "
@@ -98,7 +98,6 @@ def analyze_reviews_with_gpt(reviews):
 # Streamlit App
 st.title("🛒 Product Comparison with Sentiment Analysis and Pricing")
 
-# Load Data
 @st.cache_data
 def load_data(file_path):
     return pd.read_csv(file_path)
@@ -108,11 +107,9 @@ product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
 city_list = load_data("city_List_test.csv")
 
-# Select City
 cities = city_list["City"].unique().tolist()
 selected_city = st.selectbox("Select Your City", cities)
 
-# Select Products for Comparison
 products = product_data["Product Name"].unique().tolist()
 product_1 = st.selectbox("Select Product 1", products)
 product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
@@ -122,41 +119,27 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     st.write("🚀 Scraping Product Data...")
-    errors = []  # To collect error logs
+    errors = []
     with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
-    # Prepare Price and Sentiment Analysis
     price_comparison = []
-    for data in [scraped_data_1, scraped_data_2]:
-        for item in data:
-            if item["price"] is not None:
-                price_comparison.append({
-                    "Product": item["title"],
-                    "Source": item["source"],
-                    "Price": item["price"],
-                    "Link": f"[Buy Now]({item['source']})" if item["source"] != "Other" else "N/A"
-                })
-            if item.get("error"):
-                errors.append(f"{item['source']}: {item['error']}")
+    for url, data in zip(urls_1 + urls_2, scraped_data_1 + scraped_data_2):
+        if data["price"] is not None:
+            price_comparison.append({
+                "Product": data["title"],
+                "Source": data["source"],
+                "Price": data["price"],
+                "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
+            })
+        if data.get("error"):
+            errors.append(f"{url}: {data['error']}")
 
-    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
-    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
-
-    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
-    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
-
-    # Display Sentiments
-    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
-    st.markdown(f"**{scraped_data_1[0]['title']}**:\n{sentiment_1}")
-    st.markdown(f"**{scraped_data_2[0]['title']}**:\n{sentiment_2}")
-
-    # Local Supplier Prices
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
         (supplier_data["City"] == selected_city)
-    ].drop_duplicates(subset=["Product Name", "Supplier Name"])
+    ].drop_duplicates()
     for _, row in supplier_info.iterrows():
         address_encoded = urllib.parse.quote(row['Address'])
         google_maps_url = f"https://www.google.com/maps/search/?api=1&query={address_encoded}"
@@ -164,25 +147,16 @@ if st.button("🔍 Compare Products"):
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": float(row["Price"]),
-            "Link": f"[Get Direction]({google_maps_url})"
+            "Link": f'<a href="{google_maps_url}" target="_blank">Get Direction</a>'
         })
 
-    # Add Cheapest Source Tag
     price_df = pd.DataFrame(price_comparison)
     min_price = price_df["Price"].min()
     price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
-    # Ensure hyperlinks show as short text
-    price_df["Link"] = price_df["Link"].apply(
-        lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">Buy Now</a>'
-        if "Buy Now" in x else f'<a href="{x.split("(")[1][:-1]}" target="_blank">Get Direction</a>'
-    )
-
-    # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
     st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
     if not price_df.empty:
         avg_prices = price_df.groupby("Source")["Price"].mean()
@@ -192,10 +166,7 @@ if st.button("🔍 Compare Products"):
         ax.set_ylabel("Average Price (₹)")
         ax.set_xlabel("Source")
         st.pyplot(fig)
-    else:
-        st.write("No valid price data available for plotting.")
 
-    # Display Errors (if any)
     if errors:
         st.markdown("### 🚨 Error Log")
         for error in errors:
