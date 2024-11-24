@@ -26,7 +26,8 @@ USER_AGENTS = [
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Scraper Function with Error Handling
+
+# Scraper Function
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -135,7 +136,7 @@ if st.button("🔍 Compare Products"):
                     "Product": item["title"],
                     "Source": item["source"],
                     "Price": item["price"],
-                    "Link": f"[Buy Now](#)"
+                    "Link": f"[Buy Now]({item['source']})" if item["source"] != "Other" else "N/A"
                 })
             if item.get("error"):
                 errors.append(f"{item['source']}: {item['error']}")
@@ -167,37 +168,32 @@ if st.button("🔍 Compare Products"):
         })
 
     # Add Cheapest Source Tag
-price_df = pd.DataFrame(price_comparison)
-min_price = price_df["Price"].min()
-price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
+    price_df = pd.DataFrame(price_comparison)
+    min_price = price_df["Price"].min()
+    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
-# Ensure hyperlinks show as short text
-def format_link(link):
-    """Format the link column to display proper short text with a clickable hyperlink."""
-    if "Get Direction" in link:
-        return f'<a href="{link.split("(")[1][:-1]}" target="_blank">Get Direction</a>'
-    elif "Buy Now" in link:
-        return f'<a href="{link.split("(")[1][:-1]}" target="_blank">Buy Now</a>'
-    return link  # Fallback if the link format doesn't match expected patterns
+    # Ensure hyperlinks show as short text
+    price_df["Link"] = price_df["Link"].apply(
+        lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">Buy Now</a>'
+        if "Buy Now" in x else f'<a href="{x.split("(")[1][:-1]}" target="_blank">Get Direction</a>'
+    )
 
-price_df["Link"] = price_df["Link"].apply(format_link)
+    # Display Price Comparison Table
+    st.markdown("### Price Comparison Table")
+    st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-# Display Price Comparison Table
-st.markdown("### Price Comparison Table")
-st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# Plot Price Comparison Graph
-st.markdown("### 📊 Price Comparison Graph")
-if not price_df.empty:
-    avg_prices = price_df.groupby("Source")["Price"].mean()
-    fig, ax = plt.subplots()
-    avg_prices.plot(kind="bar", ax=ax)
-    ax.set_title("Price Comparison by Source")
-    ax.set_ylabel("Average Price (₹)")
-    ax.set_xlabel("Source")
-    st.pyplot(fig)
-else:
-    st.write("No valid price data available for plotting.")
+    # Plot Price Comparison Graph
+    st.markdown("### 📊 Price Comparison Graph")
+    if not price_df.empty:
+        avg_prices = price_df.groupby("Source")["Price"].mean()
+        fig, ax = plt.subplots()
+        avg_prices.plot(kind="bar", ax=ax)
+        ax.set_title("Price Comparison by Source")
+        ax.set_ylabel("Average Price (₹)")
+        ax.set_xlabel("Source")
+        st.pyplot(fig)
+    else:
+        st.write("No valid price data available for plotting.")
 
     # Display Errors (if any)
     if errors:
