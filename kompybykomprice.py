@@ -20,7 +20,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
-# Scraper Function
+# Scraper Function with INR Price Cleaning
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -40,17 +40,14 @@ def scrape_page_with_scraperapi(url):
         reviews = soup.find_all("span", {"data-hook": "review-body"})
         reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        # Extract Price and Clean It
+        # Extract and Clean Price for INR
         price = (
             soup.find("span", {"id": "priceblock_ourprice"})
             or soup.find("span", {"id": "priceblock_dealprice"})
             or soup.find("span", {"class": "a-price-whole"})
         )
         price = price.text.strip() if price else "Price not found"
-
-        # Clean the price to remove special characters (e.g., `$`, `,`)
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
-        price_cleaned = price_cleaned if price_cleaned else None  # Handle cases where price is missing
 
         return {"title": title, "reviews": reviews, "price": price_cleaned}
 
@@ -80,7 +77,7 @@ def analyze_reviews_with_gpt(reviews):
         return f"Error generating sentiment analysis: {e}"
 
 # Streamlit App
-st.title("🛒 Product Comparison with Sentiment Analysis and City-Specific Prices")
+st.title("🛒 Product Comparison with Sentiment Analysis and INR Prices")
 
 # Load Data
 @st.cache_data
@@ -105,7 +102,7 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape Product Data
-    st.write("🚀 Scraping Product Data Good Things Takes Time Wait for Amazing Deals...")
+    st.write("🚀 Scraping Product Data...")
     scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
     scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
@@ -116,8 +113,8 @@ if st.button("🔍 Compare Products"):
     price_1 = scraped_data_1[0]["price"] if scraped_data_1 else "Price not found"
     price_2 = scraped_data_2[0]["price"] if scraped_data_2 else "Price not found"
 
-    st.markdown(f"### Product 1: {title_1} - ${price_1}")
-    st.markdown(f"### Product 2: {title_2} - ${price_2}")
+    st.markdown(f"### Product 1: {title_1} - ₹{price_1}")
+    st.markdown(f"### Product 2: {title_2} - ₹{price_2}")
 
     # Analyze Reviews
     reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
@@ -174,7 +171,7 @@ if st.button("🔍 Compare Products"):
         fig, ax = plt.subplots()
         avg_prices.plot(kind="bar", ax=ax)
         ax.set_title("Price Comparison by Source")
-        ax.set_ylabel("Average Price")
+        ax.set_ylabel("Average Price (₹)")
         ax.set_xlabel("Source")
         st.pyplot(fig)
     else:
