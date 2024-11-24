@@ -168,24 +168,33 @@ if st.button("🔍 Compare Products"):
         })
 
     # Add Cheapest Source Tag
-    price_df = pd.DataFrame(price_comparison)
-    min_price = price_df["Price"].min()
-    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
+price_df = pd.DataFrame(price_comparison)
+min_price = price_df["Price"].min()
+price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
-    st.markdown("### Price Comparison Table")
-    st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+# Ensure hyperlinks show as short text
+price_df["Link"] = price_df["Link"].apply(
+    lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">{"Get Direction" if "Get Direction" in x else "Buy Now"}</a>'
+)
 
-    st.markdown("### 📊 Price Comparison Graph")
-    if not price_df.empty:
-        avg_prices = price_df.groupby("Source")["Price"].mean()
-        fig, ax = plt.subplots()
-        avg_prices.plot(kind="bar", ax=ax)
-        ax.set_title("Price Comparison by Source")
-        ax.set_ylabel("Average Price (₹)")
-        ax.set_xlabel("Source")
-        st.pyplot(fig)
-    else:
-        st.write("No valid price data available for plotting.")
+# Display Price Comparison Table
+st.markdown("### Price Comparison Table")
+st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
+
+
+   # Plot Price Comparison Graph
+st.markdown("### 📊 Price Comparison Graph")
+if not price_df.empty:
+    avg_prices = price_df.groupby("Source")["Price"].mean()
+    fig, ax = plt.subplots()
+    avg_prices.plot(kind="bar", ax=ax)
+    ax.set_title("Price Comparison by Source")
+    ax.set_ylabel("Average Price (₹)")
+    ax.set_xlabel("Source")
+    st.pyplot(fig)
+else:
+    st.write("No valid price data available for plotting.")
+
 
     # Display Errors (if any)
     if errors:
