@@ -113,8 +113,8 @@ product_1 = st.selectbox("Select Product 1", products)
 product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
 if st.button("🔍 Compare Products"):
-    urls_1 = product_data[product_data["Product Name"] == product_1][["Product URL", "Product Name"]]
-    urls_2 = product_data[product_data["Product Name"] == product_2][["Product URL", "Product Name"]]
+    urls_1 = product_data[product_data["Product Name"] == product_1]
+    urls_2 = product_data[product_data["Product Name"] == product_2]
 
     st.write("🚀 Scraping Product Data...")
     errors = []
@@ -136,7 +136,6 @@ if st.button("🔍 Compare Products"):
         if data.get("error"):
             errors.append(f"{url}: {data['error']}")
 
-    # Use Google Maps Links Directly from the CSV
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
         (supplier_data["City"] == selected_city)
