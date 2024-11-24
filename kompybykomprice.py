@@ -21,7 +21,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
-# ScraperAPI Wrapper Function with Retry
+# ScraperAPI Wrapper Function with Improved Price Extraction
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -42,8 +42,12 @@ def scrape_page_with_scraperapi(url):
         reviews = soup.find_all("span", {"data-hook": "review-body"})
         reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        # Extract Price
-        price = soup.find("span", {"id": "priceblock_ourprice"}) or soup.find("span", {"id": "priceblock_dealprice"})
+        # Extract Price (with additional fallback selectors)
+        price = (
+            soup.find("span", {"id": "priceblock_ourprice"})
+            or soup.find("span", {"id": "priceblock_dealprice"})
+            or soup.find("span", {"class": "a-price-whole"})
+        )
         price = price.text.strip() if price else "Price not found"
 
         return {"title": title, "reviews": reviews, "price": price}
@@ -79,7 +83,7 @@ def load_data(file_path):
 
 product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
-city_list = pd.read_csv("city_List_test.csv")
+city_list = load_data("city_List_test.csv")
 
 # Select City
 cities = city_list["City"].unique().tolist()
@@ -116,25 +120,14 @@ if st.button("🔍 Compare Products"):
     sentiment_1 = analyze_reviews_with_gpt(reviews_1)
     sentiment_2 = analyze_reviews_with_gpt(reviews_2)
 
-    # Separate Likes and Dislikes
-    likes_1, dislikes_1 = sentiment_1.split("Negative Sentiments:")[0], sentiment_1.split("Negative Sentiments:")[1]
-    likes_2, dislikes_2 = sentiment_2.split("Negative Sentiments:")[0], sentiment_2.split("Negative Sentiments:")[1]
+    # Display Reviews and Sentiments
+    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
+    st.markdown(f"**{title_1}**:\n{sentiment_1.split('Negative Sentiments:')[0]}")
+    st.markdown(f"**{title_2}**:\n{sentiment_2.split('Negative Sentiments:')[0]}")
 
-    st.markdown("### 😊 Customer Reviews: Likes")
-    likes_table = pd.DataFrame({
-        "Aspect": ["Positive Sentiments"],
-        title_1: [likes_1],
-        title_2: [likes_2]
-    })
-    st.table(likes_table)
-
-    st.markdown("### 😞 Customer Reviews: Dislikes")
-    dislikes_table = pd.DataFrame({
-        "Aspect": ["Negative Sentiments"],
-        title_1: [dislikes_1],
-        title_2: [dislikes_2]
-        })
-    st.table(dislikes_table)
+    st.markdown("### 😞 Customer Reviews: Negative Sentiments")
+    st.markdown(f"**{title_1}**:\n{sentiment_1.split('Negative Sentiments:')[1]}")
+    st.markdown(f"**{title_2}**:\n{sentiment_2.split('Negative Sentiments:')[1]}")
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
@@ -163,12 +156,16 @@ if st.button("🔍 Compare Products"):
             "Store Link": f"[Address]({row['Address']})"
         })
 
-    # Convert to DataFrame for Display
-    price_df = pd.DataFrame(price_comparison)
-    st.table(price_df)
+    # Display Price Comparison Table with Hyperlinks
+    for entry in price_comparison:
+        st.markdown(
+            f"**Product:** {entry['Product']} | **Source:** {entry['Source']} | "
+            f"**Price:** {entry['Price']} | [Link]({entry['Store Link']})"
+        )
 
     # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
+    price_df = pd.DataFrame(price_comparison)
     price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
     if not price_df["Price"].isna().all():
         min_price = price_df["Price"].min()
