@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 import random
 import streamlit as st
 import openai
-import plotly.express as px
 from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
@@ -164,24 +163,6 @@ if st.button("🔍 Compare Products"):
     st.markdown("### Sentiment Analysis of Reviews")
     for product, sentiment in sentiment_summaries.items():
         st.markdown(f"**{product}:**\n{sentiment}")
-
-    # Plot Separate Graphs for Product 1 and Product 2 Using Plotly
-    st.markdown("### 📊 Product Price Comparison Across Sources")
-
-    for product in [product_1, product_2]:
-        product_data = price_df[price_df["Product"] == product]
-        if not product_data.empty:
-            fig = px.bar(
-                product_data,
-                x="Source",
-                y="Price",
-                color="Source",
-                title=f"{product} Price Comparison Across Sources",
-                labels={"Price": "Price (₹)", "Source": "Source / Store"},
-                text="Price"
-            )
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(fig)
 
     if errors:
         st.markdown("### 🚨 Error Log")
