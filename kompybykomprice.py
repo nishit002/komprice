@@ -127,6 +127,11 @@ else:
             (supplier_data["City"] == selected_city)
         ]
 
+        # Remove duplicates from supplier data
+        supplier_filtered = supplier_filtered.drop_duplicates(
+            subset=["City", "Product Name", "Supplier Name", "Address", "Price"]
+        )
+
         urls_1 = product_data[product_data["Product Name"] == product_1]
         urls_2 = product_data[product_data["Product Name"] == product_2]
 
