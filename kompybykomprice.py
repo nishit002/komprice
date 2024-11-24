@@ -26,7 +26,7 @@ USER_AGENTS = [
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Scraper Function with INR Price Cleaning
+# Scraper Function with Enhanced Price Extraction
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -39,29 +39,39 @@ def scrape_page_with_scraperapi(url):
         soup = BeautifulSoup(response.text, "html.parser")
 
         # Detect source based on URL
-        source = "Amazon" if "amazon" in url.lower() else "Flipkart" if "flipkart" in url.lower() else "Other"
+        if "amazon" in url.lower():
+            source = "Amazon"
+            title = soup.find("span", {"id": "productTitle"})
+            title = title.text.strip() if title else "Title not found"
 
-        # Extract Product Title
-        title = soup.find("span", {"id": "productTitle"}) or soup.find("h1", {"class": "yhB1nd"})
-        title = title.text.strip() if title else "Title not found"
+            price = (
+                soup.find("span", {"id": "priceblock_ourprice"})
+                or soup.find("span", {"id": "priceblock_dealprice"})
+                or soup.find("span", {"class": "a-price-whole"})
+            )
+            price = price.text.strip() if price else "Price not found"
 
-        # Extract Customer Reviews
-        reviews = soup.find_all("span", {"data-hook": "review-body"}) or soup.find_all("div", {"class": "t-ZTKy"})
-        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
+        elif "flipkart" in url.lower():
+            source = "Flipkart"
+            title = soup.find("span", {"class": "B_NuCI"})
+            title = title.text.strip() if title else "Title not found"
 
-        # Extract and Clean Price for INR
-        price = (
-            soup.find("span", {"id": "priceblock_ourprice"})
-            or soup.find("span", {"id": "priceblock_dealprice"})
-            or soup.find("div", {"class": "_30jeq3"})
-        )
-        price = price.text.strip() if price else "Price not found"
+            price = soup.find("div", {"class": "_30jeq3"})
+            price = price.text.strip() if price else "Price not found"
+
+        else:
+            source = "Other"
+            title = "Title not found"
+            price = "Price not found"
+
+        # Clean and format price
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
+        price_cleaned = float(price_cleaned) if price_cleaned else None
 
         # Log details
         logging.info(f"Scraped URL: {url}, Source: {source}, Title: {title}, Price: {price_cleaned}")
 
-        return {"title": title, "reviews": reviews, "price": price_cleaned, "source": source}
+        return {"title": title, "price": price_cleaned, "source": source}
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -70,26 +80,8 @@ def scrape_page_with_scraperapi(url):
         logging.error(f"Scraper error: {e}")
         raise e
 
-# Sentiment Analysis Function
-def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews using GPT."""
-    try:
-        prompt = (
-            "Analyze the following customer reviews and provide a summary in bullet points for: "
-            "1. Positive Sentiments\n2. Negative Sentiments\nReviews:\n" + "\n".join(reviews)
-        )
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "You are a sentiment analysis expert."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=300,
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"Error generating sentiment analysis: {e}"
-
 # Streamlit App
-st.title("🛒 Product Comparison with Sentiment Analysis and INR Prices")
+st.title("🛒 Product Comparison with Accurate Price Scraping")
 
 # Load Data
 @st.cache_data
@@ -119,41 +111,18 @@ if st.button("🔍 Compare Products"):
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
-    # Display Titles and Prices
-    title_1 = scraped_data_1[0]["title"] if scraped_data_1 else "No title found"
-    title_2 = scraped_data_2[0]["title"] if scraped_data_2 else "No title found"
-
-    price_1 = scraped_data_1[0]["price"] if scraped_data_1 else "Price not found"
-    price_2 = scraped_data_2[0]["price"] if scraped_data_2 else "Price not found"
-
-    st.markdown(f"### Product 1: {title_1} - ₹{price_1}")
-    st.markdown(f"### Product 2: {title_2} - ₹{price_2}")
-
-    # Analyze Reviews
-    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
-    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
-
-    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
-    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
-
-    # Display Sentiments
-    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
-    st.markdown(f"**{title_1}**:\n{sentiment_1}")
-    st.markdown(f"**{title_2}**:\n{sentiment_2}")
-
-    # Price Comparison Table
-    st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
+    # Prepare price comparison data
     price_comparison = []
 
-    # Online Store Prices
     for data in [scraped_data_1, scraped_data_2]:
         for item in data:
-            price_comparison.append({
-                "Product": item["title"],
-                "Source": item["source"],
-                "Price": float(item["price"]) if item["price"].replace('.', '', 1).isdigit() else None,
-                "Link": f"[Buy Now](#)"
-            })
+            if item["price"] is not None:
+                price_comparison.append({
+                    "Product": item["title"],
+                    "Source": item["source"],
+                    "Price": item["price"],
+                    "Link": f"[Buy Now](#)"
+                })
 
     # Local Supplier Prices
     supplier_info = supplier_data[
