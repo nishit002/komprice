@@ -26,7 +26,7 @@ USER_AGENTS = [
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Scraper Function with Enhanced Price Extraction
+# Scraper Function
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
     """Scrape a webpage using ScraperAPI with retries and error handling."""
@@ -38,12 +38,10 @@ def scrape_page_with_scraperapi(url):
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Detect source based on URL
         if "amazon" in url.lower():
             source = "Amazon"
             title = soup.find("span", {"id": "productTitle"})
             title = title.text.strip() if title else "Title not found"
-
             price = (
                 soup.find("span", {"id": "priceblock_ourprice"})
                 or soup.find("span", {"id": "priceblock_dealprice"})
@@ -55,7 +53,6 @@ def scrape_page_with_scraperapi(url):
             source = "Flipkart"
             title = soup.find("span", {"class": "B_NuCI"})
             title = title.text.strip() if title else "Title not found"
-
             price = soup.find("div", {"class": "_30jeq3"})
             price = price.text.strip() if price else "Price not found"
 
@@ -64,14 +61,13 @@ def scrape_page_with_scraperapi(url):
             title = "Title not found"
             price = "Price not found"
 
-        # Clean and format price
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
         price_cleaned = float(price_cleaned) if price_cleaned else None
 
-        # Log details
-        logging.info(f"Scraped URL: {url}, Source: {source}, Title: {title}, Price: {price_cleaned}")
+        reviews = soup.find_all("span", {"data-hook": "review-body"}) or soup.find_all("div", {"class": "t-ZTKy"})
+        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        return {"title": title, "price": price_cleaned, "source": source}
+        return {"title": title, "price": price_cleaned, "source": source, "reviews": reviews}
 
     except requests.exceptions.RequestException as e:
         logging.error(f"Request error: {e}")
@@ -80,8 +76,28 @@ def scrape_page_with_scraperapi(url):
         logging.error(f"Scraper error: {e}")
         raise e
 
+
+# Sentiment Analysis Function
+def analyze_reviews_with_gpt(reviews):
+    """Analyze reviews using GPT."""
+    try:
+        prompt = (
+            "Analyze the following customer reviews and provide a summary in bullet points for: "
+            "1. Positive Sentiments\n2. Negative Sentiments\nReviews:\n" + "\n".join(reviews)
+        )
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "You are a sentiment analysis expert."},
+                      {"role": "user", "content": prompt}],
+            max_tokens=300,
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return f"Error generating sentiment analysis: {e}"
+
+
 # Streamlit App
-st.title("🛒 Product Comparison with Accurate Price Scraping")
+st.title("🛒 Product Comparison with Sentiment Analysis and INR Prices")
 
 # Load Data
 @st.cache_data
@@ -105,15 +121,13 @@ if st.button("🔍 Compare Products"):
     urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].tolist()
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
-    # Concurrent Scraping of Product Data
     st.write("🚀 Scraping Product Data...")
     with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
-    # Prepare price comparison data
+    # Prepare Price and Sentiment Analysis
     price_comparison = []
-
     for data in [scraped_data_1, scraped_data_2]:
         for item in data:
             if item["price"] is not None:
@@ -123,6 +137,17 @@ if st.button("🔍 Compare Products"):
                     "Price": item["price"],
                     "Link": f"[Buy Now](#)"
                 })
+
+    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
+    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
+
+    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
+    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
+
+    # Display Sentiments
+    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
+    st.markdown(f"**{scraped_data_1[0]['title']}**:\n{sentiment_1}")
+    st.markdown(f"**{scraped_data_2[0]['title']}**:\n{sentiment_2}")
 
     # Local Supplier Prices
     supplier_info = supplier_data[
@@ -144,16 +169,9 @@ if st.button("🔍 Compare Products"):
     min_price = price_df["Price"].min()
     price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
-    # Render Hyperlinks in the Table
-    price_df["Link"] = price_df["Link"].apply(
-        lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">{x.split("[")[1].split("]")[0]}</a>'
-    )
-
-    # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
     st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
     if not price_df.empty:
         avg_prices = price_df.groupby("Source")["Price"].mean()
