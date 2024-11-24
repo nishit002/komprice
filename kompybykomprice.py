@@ -24,7 +24,6 @@ USER_AGENTS = [
 # ScraperAPI Wrapper Function with Improved Price Extraction
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
-    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -42,7 +41,7 @@ def scrape_page_with_scraperapi(url):
         reviews = soup.find_all("span", {"data-hook": "review-body"})
         reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
 
-        # Extract Price (with additional fallback selectors)
+        # Extract Price
         price = (
             soup.find("span", {"id": "priceblock_ourprice"})
             or soup.find("span", {"id": "priceblock_dealprice"})
@@ -57,7 +56,6 @@ def scrape_page_with_scraperapi(url):
 
 # Sentiment Analysis Using OpenAI
 def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points for: "
@@ -120,18 +118,10 @@ if st.button("🔍 Compare Products"):
     sentiment_1 = analyze_reviews_with_gpt(reviews_1)
     sentiment_2 = analyze_reviews_with_gpt(reviews_2)
 
-    # Separate Likes and Dislikes
-    likes_1, dislikes_1 = sentiment_1.split("Negative Sentiments:")[0], sentiment_1.split("Negative Sentiments:")[1]
-    likes_2, dislikes_2 = sentiment_2.split("Negative Sentiments:")[0], sentiment_2.split("Negative Sentiments:")[1]
-
     # Display Sentiments
     st.markdown("### 😊 Customer Reviews: Positive Sentiments")
-    st.markdown(f"**{title_1}**:\n{likes_1}")
-    st.markdown(f"**{title_2}**:\n{likes_2}")
-
-    st.markdown("### 😞 Customer Reviews: Negative Sentiments")
-    st.markdown(f"**{title_1}**:\n{dislikes_1}")
-    st.markdown(f"**{title_2}**:\n{dislikes_2}")
+    st.markdown(f"**{title_1}**:\n{sentiment_1}")
+    st.markdown(f"**{title_2}**:\n{sentiment_2}")
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
@@ -161,25 +151,13 @@ if st.button("🔍 Compare Products"):
         })
 
     # Display Price Comparison Table
-    for entry in price_comparison:
-        st.markdown(
-            f"**Product:** {entry['Product']} | **Source:** {entry['Source']} | "
-            f"**Price:** {entry['Price']} | [Link]({entry['Store Link']})"
-        )
+    price_df = pd.DataFrame(price_comparison)
+    st.write(price_df)
 
     # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
-    
-    # Convert Price to Numeric and Handle Missing Data
-    price_df = pd.DataFrame(price_comparison)
     price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-    
-    # Check if there is valid data for plotting
     if price_df["Price"].notna().sum() > 0:
-        min_price = price_df["Price"].min()
-        price_df["Price Difference (%)"] = ((price_df["Price"] - min_price) / min_price) * 100
-
-        # Plot the data
         fig, ax = plt.subplots()
         price_df.groupby("Source")["Price"].mean().plot(kind="bar", ax=ax)
         ax.set_title("Price Comparison by Source")
