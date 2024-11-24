@@ -24,7 +24,6 @@ USER_AGENTS = [
 # ScraperAPI Wrapper Function with Improved Price Extraction
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
-    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -57,7 +56,6 @@ def scrape_page_with_scraperapi(url):
 
 # Sentiment Analysis Using OpenAI
 def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews using OpenAI GPT."""
     try:
         prompt = (
             "Analyze the following customer reviews and provide a summary in bullet points for: "
@@ -149,7 +147,7 @@ if st.button("🔍 Compare Products"):
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": f"{float(row['Price']):,.2f}",
-            "Store Link": f"[Address]({row['Address']})"
+            "Store Link": f"[Direction]({row['Address']})"  # Updated anchor text
         })
 
     # Display Price Comparison Table
