@@ -107,6 +107,7 @@ city_list = load_data("city_List_test.csv")
 
 # Clean column names to remove extra spaces
 product_data.columns = product_data.columns.str.strip()
+supplier_data.columns = supplier_data.columns.str.strip()
 
 # Ensure 'Product URL' column exists
 if "Product URL" not in product_data.columns:
@@ -143,17 +144,13 @@ else:
             if data.get("error"):
                 errors.append(f"{url}: {data['error']}")
 
-        # Add supplier info with links
-        supplier_info = supplier_data[
-            (supplier_data["Product Name"].isin([product_1, product_2])) &
-            (supplier_data["City"] == selected_city)
-        ].drop_duplicates()
-        for _, row in supplier_info.iterrows():
+        # Add supplier info with links from 'Address' column
+        for _, row in supplier_data.iterrows():
             price_comparison.append({
                 "Product": row["Product Name"],
                 "Source": row["Supplier Name"],
                 "Price": float(row["Price"]),
-                "Link": f'<a href="{row["Product URL"]}" target="_blank">Get Direction</a>'
+                "Link": f'<a href="{row["Address"]}" target="_blank">Get Direction</a>'
             })
 
         price_df = pd.DataFrame(price_comparison)
