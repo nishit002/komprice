@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import logging
+import matplotlib.pyplot as plt
 
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
@@ -24,7 +25,6 @@ USER_AGENTS = [
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
@@ -73,34 +73,22 @@ def scrape_page_with_scraperapi(url):
         logging.error(f"Error scraping {url}: {e}")
         return {"title": "Title not found", "price": None, "source": "Error", "reviews": [], "url": url, "error": str(e)}
 
-
-def analyze_reviews_with_gpt(reviews):
-    """Analyze reviews using GPT."""
-    if not reviews or reviews == ["No reviews found"]:
-        return "No reviews available for sentiment analysis."
-    try:
-        prompt = (
-            "Analyze the following customer reviews and provide a summary in bullet points for: "
-            "1. Positive Sentiments\n2. Negative Sentiments\nReviews:\n" + "\n".join(reviews)
-        )
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "system", "content": "You are a sentiment analysis expert."},
-                      {"role": "user", "content": prompt}],
-            max_tokens=300,
-        )
-        return response['choices'][0]['message']['content']
-    except Exception as e:
-        return f"Error generating sentiment analysis: {e}"
-
+def calculate_discount_percentage(product_name, df):
+    """Calculate discount percentage based on highest and cheapest price."""
+    product_data = df[df["Product"] == product_name]
+    if not product_data.empty:
+        highest_price = product_data["Price"].max()
+        cheapest_price = product_data["Price"].min()
+        discount_percentage = (highest_price - cheapest_price) / highest_price * 100
+        return discount_percentage, highest_price, cheapest_price
+    return None, None, None
 
 # Streamlit App
-st.title("🛒 Product Comparison with Sentiment Analysis and Pricing")
+st.title("🛒 Product Comparison with Discounts and Sentiment Analysis")
 
 @st.cache_data
 def load_data(file_path):
     return pd.read_csv(file_path)
-
 
 product_data = load_data("Product_URL_Test.csv")
 supplier_data = load_data("Supplier_Info_prices.csv")
@@ -118,13 +106,11 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     st.write("🚀 Scraping Product Data...")
-    errors = []
     with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
     price_comparison = []
-    sentiment_summaries = {}
     for url, data in zip(urls_1 + urls_2, scraped_data_1 + scraped_data_2):
         if data["price"] is not None:
             price_comparison.append({
@@ -133,9 +119,6 @@ if st.button("🔍 Compare Products"):
                 "Price": data["price"],
                 "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
             })
-        sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
-        if data.get("error"):
-            errors.append(f"{url}: {data['error']}")
 
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
@@ -152,19 +135,32 @@ if st.button("🔍 Compare Products"):
         })
 
     price_df = pd.DataFrame(price_comparison)
-    min_price = price_df["Price"].min()
-    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
+
+    # Calculate discount percentages
+    discount_1, highest_1, cheapest_1 = calculate_discount_percentage(product_1, price_df)
+    discount_2, highest_2, cheapest_2 = calculate_discount_percentage(product_2, price_df)
+
+    # Plot Discount Percentage Graphs
+    fig1, ax1 = plt.subplots(figsize=(8, 6))
+    products = [product_1, product_2]
+    discounts = [discount_1, discount_2]
+    ax1.bar(products, discounts, color=["blue", "orange"])
+    ax1.set_title("Discount Percentage by Product")
+    ax1.set_xlabel("Product")
+    ax1.set_ylabel("Discount Percentage (%)")
+    for index, value in enumerate(discounts):
+        ax1.text(index, value, f"{value:.1f}%", ha="center", va="bottom")
+
+    # Annotate highest and cheapest prices
+    for index, (highest, cheapest) in enumerate(zip([highest_1, highest_2], [cheapest_1, cheapest_2])):
+        ax1.text(index, discounts[index] / 2,
+                 f"Highest: ₹{highest:.2f}\nCheapest: ₹{cheapest:.2f}",
+                 ha="center", va="center", color="white", fontsize=10)
+
+    # Display the graph in Streamlit
+    st.markdown("### Discount Percentage Comparison")
+    st.pyplot(fig1)
 
     # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
     st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-    # Display Sentiment Analysis
-    st.markdown("### Sentiment Analysis of Reviews")
-    for product, sentiment in sentiment_summaries.items():
-        st.markdown(f"**{product}:**\n{sentiment}")
-
-    if errors:
-        st.markdown("### 🚨 Error Log")
-        for error in errors:
-            st.error(error)
