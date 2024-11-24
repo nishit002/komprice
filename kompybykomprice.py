@@ -129,7 +129,7 @@ else:
 
         # Remove duplicates from supplier data
         supplier_filtered = supplier_filtered.drop_duplicates(
-            subset=["Product Name", "Supplier Name", "Price"]
+            subset=["City", "Product Name", "Supplier Name", "Address", "Price"]
         )
 
         urls_1 = product_data[product_data["Product Name"] == product_1]
@@ -165,10 +165,8 @@ else:
             })
 
         price_df = pd.DataFrame(price_comparison)
-        # Mark the "Cheapest" entry per product
-        price_df["Cheapest"] = price_df.groupby("Product")["Price"].transform(
-            lambda x: x == x.min()
-        ).replace({True: "Cheapest", False: ""})
+        min_price = price_df["Price"].min()
+        price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
         # Display Price Comparison Table
         st.markdown("### Price Comparison Table")
