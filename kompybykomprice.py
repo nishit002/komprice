@@ -124,7 +124,7 @@ else:
         urls_1 = product_data[product_data["Product Name"] == product_1]
         urls_2 = product_data[product_data["Product Name"] == product_2]
 
-        st.write("🚀 Scraping Product Data...")
+        st.write("🚀 Fetching Product Data...")
         with ThreadPoolExecutor(max_workers=10) as executor:  # Increased concurrency
             scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1["Product URL"].tolist()))
             scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2["Product URL"].tolist()))
