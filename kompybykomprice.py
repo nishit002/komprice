@@ -172,9 +172,16 @@ if st.button("🔍 Compare Products"):
     price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
     # Ensure hyperlinks show as short text
-    price_df["Link"] = price_df["Link"].apply(
-        lambda x: f'<a href="{x.split("(")[1][:-1]}" target="_blank">{"Get Direction" if "Get Direction" in x else "Buy Now"}</a>'
-    )
+def format_link(link):
+    """Format the link column to display proper short text with a clickable hyperlink."""
+    if "Get Direction" in link:
+        return f'<a href="{link.split("(")[1][:-1]}" target="_blank">Get Direction</a>'
+    elif "Buy Now" in link:
+        return f'<a href="{link.split("(")[1][:-1]}" target="_blank">Buy Now</a>'
+    return link  # Fallback if the link format doesn't match expected patterns
+
+price_df["Link"] = price_df["Link"].apply(format_link)
+
 
     # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
