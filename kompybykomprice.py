@@ -116,7 +116,7 @@ if st.button("🔍 Compare Products"):
     urls_1 = product_data[product_data["Product Name"] == product_1]
     urls_2 = product_data[product_data["Product Name"] == product_2]
 
-    st.write("🚀 Fetching Product Data...")
+    st.write("🚀 Scraping Product Data...")
     errors = []
     with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1["Product URL"].tolist()))
@@ -136,6 +136,7 @@ if st.button("🔍 Compare Products"):
         if data.get("error"):
             errors.append(f"{url}: {data['error']}")
 
+    # Use Product URL for Google Maps Links
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
         (supplier_data["City"] == selected_city)
@@ -145,7 +146,7 @@ if st.button("🔍 Compare Products"):
             "Product": row["Product Name"],
             "Source": row["Supplier Name"],
             "Price": float(row["Price"]),
-            "Link": f'<a href="{row["Google Maps Link"]}" target="_blank">Get Direction</a>'
+            "Link": f'<a href="{row["Product URL"]}" target="_blank">Get Direction</a>'
         })
 
     price_df = pd.DataFrame(price_comparison)
