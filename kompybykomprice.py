@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import random
 import streamlit as st
 import openai
+from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
 import logging
@@ -18,18 +19,20 @@ SCRAPER_API_KEY = st.secrets["scraperapi"]["scraperapi_key"]
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
-    """Scrape a webpage with ScraperAPI and handle errors."""
+    """Scrape a webpage using ScraperAPI with retries and error handling."""
     try:
         api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={url}"
         headers = {"User-Agent": random.choice(USER_AGENTS)}
-        response = requests.get(api_url, headers=headers, timeout=5)
+        response = requests.get(api_url, headers=headers, timeout=60)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -57,38 +60,42 @@ def scrape_page_with_scraperapi(url):
             title = "Title not found"
             price = "Price not found"
 
-        # Clean price
+        # Clean and format price
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
         price_cleaned = float(price_cleaned) if price_cleaned else None
 
-        return {"title": title, "price": price_cleaned, "source": source, "url": url}
+        reviews = soup.find_all("span", {"data-hook": "review-body"}) or soup.find_all("div", {"class": "t-ZTKy"})
+        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
+
+        return {"title": title, "price": price_cleaned, "source": source, "reviews": reviews, "url": url}
 
     except Exception as e:
         logging.error(f"Error scraping {url}: {e}")
-        return {"title": "Error", "price": None, "source": "Error", "url": url}
+        return {"title": "Title not found", "price": None, "source": "Error", "reviews": [], "url": url, "error": str(e)}
 
 
 def analyze_reviews_with_gpt(reviews):
-    """Simplified and faster sentiment analysis using GPT."""
-    if not reviews:
-        return "No reviews available."
+    """Analyze reviews using GPT."""
+    if not reviews or reviews == ["No reviews found"]:
+        return "No reviews available for sentiment analysis."
     try:
         prompt = (
-            "Summarize customer reviews into bullet points:\n"
-            + "\n".join(reviews[:3])  # Analyze only first 3 reviews
+            "Analyze the following customer reviews and provide a summary in bullet points for: "
+            "1. Positive Sentiments\n2. Negative Sentiments\nReviews:\n" + "\n".join(reviews)
         )
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=150,
+            messages=[{"role": "system", "content": "You are a sentiment analysis expert."},
+                      {"role": "user", "content": prompt}],
+            max_tokens=300,
         )
         return response['choices'][0]['message']['content']
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error generating sentiment analysis: {e}"
 
 
 # Streamlit App
-st.title("🛒 Fast Product Comparison with Sentiment Analysis")
+st.title("🛒 Product Comparison with Sentiment Analysis and Pricing")
 
 @st.cache_data
 def load_data(file_path):
@@ -107,49 +114,57 @@ product_1 = st.selectbox("Select Product 1", products)
 product_2 = st.selectbox("Select Product 2", [p for p in products if p != product_1])
 
 if st.button("🔍 Compare Products"):
-    # Use only a few URLs to speed up scraping
-    urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].head(2).tolist()
-    urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].head(2).tolist()
+    urls_1 = product_data[product_data["Product Name"] == product_1]["Product URL"].tolist()
+    urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     st.write("🚀 Scraping Product Data...")
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    errors = []
+    with ThreadPoolExecutor() as executor:
         scraped_data_1 = list(executor.map(scrape_page_with_scraperapi, urls_1))
         scraped_data_2 = list(executor.map(scrape_page_with_scraperapi, urls_2))
 
-    price_comparison = scraped_data_1 + scraped_data_2
+    price_comparison = []
+    sentiment_summaries = {}
+    for url, data in zip(urls_1 + urls_2, scraped_data_1 + scraped_data_2):
+        if data["price"] is not None:
+            price_comparison.append({
+                "Product": data["title"],
+                "Source": data["source"],
+                "Price": data["price"],
+                "Link": f'<a href="{url}" target="_blank">Buy Now</a>'
+            })
+        sentiment_summaries[data["title"]] = analyze_reviews_with_gpt(data["reviews"])
+        if data.get("error"):
+            errors.append(f"{url}: {data['error']}")
 
-    # Combine supplier data for the selected city
     supplier_info = supplier_data[
         (supplier_data["Product Name"].isin([product_1, product_2])) &
         (supplier_data["City"] == selected_city)
     ].drop_duplicates()
-
     for _, row in supplier_info.iterrows():
         address_encoded = urllib.parse.quote(row['Address'])
         google_maps_url = f"https://www.google.com/maps/search/?api=1&query={address_encoded}"
         price_comparison.append({
-            "title": row["Product Name"],
-            "source": row["Supplier Name"],
-            "price": float(row["Price"]),
-            "url": google_maps_url,
+            "Product": row["Product Name"],
+            "Source": row["Supplier Name"],
+            "Price": float(row["Price"]),
+            "Link": f'<a href="{google_maps_url}" target="_blank">Get Direction</a>'
         })
 
     price_df = pd.DataFrame(price_comparison)
-    price_df["Cheapest"] = price_df["price"] == price_df["price"].min()
+    min_price = price_df["Price"].min()
+    price_df["Cheapest"] = price_df["Price"].apply(lambda x: "Cheapest" if x == min_price else "")
 
     # Display Price Comparison Table
     st.markdown("### Price Comparison Table")
     st.write(price_df.to_html(escape=False, index=False), unsafe_allow_html=True)
 
-    # Simulate simplified review summaries
+    # Display Sentiment Analysis
     st.markdown("### Sentiment Analysis of Reviews")
-    for data in scraped_data_1 + scraped_data_2:
-        st.markdown(f"**{data['title']}**")
-        st.markdown(analyze_reviews_with_gpt(["Review text 1", "Review text 2", "Review text 3"]))
+    for product, sentiment in sentiment_summaries.items():
+        st.markdown(f"**{product}:**\n{sentiment}")
 
-    # Error Logging
-    st.markdown("### 🚨 Error Log")
-    errors = [data for data in price_comparison if data["source"] == "Error"]
     if errors:
+        st.markdown("### 🚨 Error Log")
         for error in errors:
             st.error(error)
