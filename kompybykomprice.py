@@ -41,20 +41,39 @@ def scrape_page_with_scraperapi(url):
         # Detect source based on URL
         source = "Amazon" if "amazon" in url.lower() else "Flipkart" if "flipkart" in url.lower() else "Other"
 
-        # Extract Product Title
-        title = soup.find("span", {"id": "productTitle"})
+        # Extract Product Title (based on source)
+        if source == "Amazon":
+            title = soup.find("span", {"id": "productTitle"})
+        elif source == "Flipkart":
+            title = soup.find("span", {"class": "B_NuCI"})
+        else:
+            title = None  # For other sources
+
         title = title.text.strip() if title else "Title not found"
 
         # Extract Customer Reviews
-        reviews = soup.find_all("span", {"data-hook": "review-body"})
-        reviews = [review.text.strip() for review in reviews if review] or ["No reviews found"]
+        reviews = []
+        if source == "Amazon":
+            reviews = soup.find_all("span", {"data-hook": "review-body"})
+            reviews = [review.text.strip() for review in reviews if review]
+        elif source == "Flipkart":
+            reviews_section = soup.find_all("div", {"class": "_6K-7Co"})
+            reviews = [review.text.strip() for review in reviews_section]
+
+        reviews = reviews or ["No reviews found"]
 
         # Extract and Clean Price for INR
-        price = (
-            soup.find("span", {"id": "priceblock_ourprice"})
-            or soup.find("span", {"id": "priceblock_dealprice"})
-            or soup.find("span", {"class": "a-price-whole"})
-        )
+        if source == "Amazon":
+            price = (
+                soup.find("span", {"id": "priceblock_ourprice"})
+                or soup.find("span", {"id": "priceblock_dealprice"})
+                or soup.find("span", {"class": "a-price-whole"})
+            )
+        elif source == "Flipkart":
+            price = soup.find("div", {"class": "_30jeq3 _16Jk6d"})
+        else:
+            price = None
+
         price = price.text.strip() if price else "Price not found"
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
 
