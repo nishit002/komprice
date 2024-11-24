@@ -99,7 +99,7 @@ if st.button("🔍 Compare Products"):
     urls_2 = product_data[product_data["Product Name"] == product_2]["Product URL"].tolist()
 
     # Scrape Product Data
-    st.write("🚀 Scraping Product Data with ScraperAPI...")
+    st.write("🚀 Fetching Product Data Good Things Take Time Wait for Amazing Deals...")
     scraped_data_1 = [scrape_page_with_scraperapi(url) for url in urls_1]
     scraped_data_2 = [scrape_page_with_scraperapi(url) for url in urls_2]
 
@@ -112,22 +112,6 @@ if st.button("🔍 Compare Products"):
 
     st.markdown(f"### Product 1: {title_1} - {price_1}")
     st.markdown(f"### Product 2: {title_2} - {price_2}")
-
-    # Analyze Reviews
-    reviews_1 = scraped_data_1[0]["reviews"] if scraped_data_1 else ["No reviews found"]
-    reviews_2 = scraped_data_2[0]["reviews"] if scraped_data_2 else ["No reviews found"]
-
-    sentiment_1 = analyze_reviews_with_gpt(reviews_1)
-    sentiment_2 = analyze_reviews_with_gpt(reviews_2)
-
-    # Display Reviews and Sentiments
-    st.markdown("### 😊 Customer Reviews: Positive Sentiments")
-    st.markdown(f"**{title_1}**:\n{sentiment_1.split('Negative Sentiments:')[0]}")
-    st.markdown(f"**{title_2}**:\n{sentiment_2.split('Negative Sentiments:')[0]}")
-
-    st.markdown("### 😞 Customer Reviews: Negative Sentiments")
-    st.markdown(f"**{title_1}**:\n{sentiment_1.split('Negative Sentiments:')[1]}")
-    st.markdown(f"**{title_2}**:\n{sentiment_2.split('Negative Sentiments:')[1]}")
 
     # Price Comparison Table
     st.markdown(f"### 💰 Price Comparison Across Stores and Suppliers (City: {selected_city})")
@@ -156,7 +140,7 @@ if st.button("🔍 Compare Products"):
             "Store Link": f"[Address]({row['Address']})"
         })
 
-    # Display Price Comparison Table with Hyperlinks
+    # Display Price Comparison Table
     for entry in price_comparison:
         st.markdown(
             f"**Product:** {entry['Product']} | **Source:** {entry['Source']} | "
@@ -165,15 +149,22 @@ if st.button("🔍 Compare Products"):
 
     # Plot Price Comparison Graph
     st.markdown("### 📊 Price Comparison Graph")
+    
+    # Convert Price to Numeric and Handle Missing Data
     price_df = pd.DataFrame(price_comparison)
     price_df["Price"] = pd.to_numeric(price_df["Price"], errors="coerce")
-    if not price_df["Price"].isna().all():
+    
+    # Check if there is valid data for plotting
+    if price_df["Price"].notna().sum() > 0:
         min_price = price_df["Price"].min()
         price_df["Price Difference (%)"] = ((price_df["Price"] - min_price) / min_price) * 100
 
+        # Plot the data
         fig, ax = plt.subplots()
-        price_df.groupby("Source")["Price Difference (%)"].mean().plot(kind="bar", ax=ax, color="skyblue")
-        ax.set_title("Price Difference by Source")
-        ax.set_ylabel("Price Difference (%)")
+        price_df.groupby("Source")["Price"].mean().plot(kind="bar", ax=ax)
+        ax.set_title("Price Comparison by Source")
+        ax.set_ylabel("Average Price")
         ax.set_xlabel("Source")
         st.pyplot(fig)
+    else:
+        st.write("No valid price data available for plotting.")
