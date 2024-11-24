@@ -8,6 +8,7 @@ import openai
 from tenacity import retry, stop_after_attempt, wait_fixed
 from concurrent.futures import ThreadPoolExecutor
 import urllib.parse
+import logging
 
 # OpenAI API Key
 openai.api_key = st.secrets["openai"]["openai_api_key"]
@@ -22,6 +23,9 @@ USER_AGENTS = [
     "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36",
 ]
 
+# Setup Logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 # Scraper Function with INR Price Cleaning
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 def scrape_page_with_scraperapi(url):
@@ -33,6 +37,9 @@ def scrape_page_with_scraperapi(url):
         response.raise_for_status()
 
         soup = BeautifulSoup(response.text, "html.parser")
+
+        # Detect source based on URL
+        source = "Amazon" if "amazon" in url.lower() else "Flipkart" if "flipkart" in url.lower() else "Other"
 
         # Extract Product Title
         title = soup.find("span", {"id": "productTitle"})
@@ -51,7 +58,10 @@ def scrape_page_with_scraperapi(url):
         price = price.text.strip() if price else "Price not found"
         price_cleaned = ''.join([char for char in price if char.isdigit() or char == '.'])
 
-        return {"title": title, "reviews": reviews, "price": price_cleaned}
+        # Log details
+        logging.info(f"Scraped URL: {url}, Source: {source}, Title: {title}, Price: {price_cleaned}")
+
+        return {"title": title, "reviews": reviews, "price": price_cleaned, "source": source}
 
     except requests.exceptions.RequestException as e:
         st.error(f"Error scraping {url}: {e}")
@@ -136,14 +146,13 @@ if st.button("🔍 Compare Products"):
     price_comparison = []
 
     # Online Store Prices
-    for product, data, urls in zip([product_1, product_2], [scraped_data_1, scraped_data_2], [urls_1, urls_2]):
-        for source, url in zip(["Amazon", "Flipkart"], urls):
-            price_cleaned = data[0]["price"] if data and data[0]["price"] else None
+    for data in [scraped_data_1, scraped_data_2]:
+        for item in data:
             price_comparison.append({
-                "Product": product,
-                "Source": source,
-                "Price": float(price_cleaned) if price_cleaned else None,
-                "Link": f"[Buy Now]({url})"
+                "Product": item["title"],
+                "Source": item["source"],
+                "Price": float(item["price"]) if item["price"] else None,
+                "Link": f"[Buy Now](#)"
             })
 
     # Local Supplier Prices
